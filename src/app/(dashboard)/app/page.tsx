@@ -73,8 +73,16 @@ function startOfWeekMonday(now: Date): Date {
 }
 
 export default async function DashboardPage() {
-  const user = await userService.requireCurrentUser();
-  const ctx = await userService.requireCurrentWorkspace();
+  let user;
+  let ctx;
+
+  try {
+    user = await userService.requireCurrentUser();
+    ctx = await userService.requireCurrentWorkspace();
+  } catch {
+    return <DashboardSetupFallback />;
+  }
+
   const workspaceId = ctx.workspace.id;
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -458,6 +466,24 @@ export default async function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DashboardSetupFallback() {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+      <div className="rounded-xl border border-border bg-card p-10 shadow-sm">
+        <Sparkles className="mx-auto size-12 text-primary" />
+        <h2 className="mt-4 text-xl font-bold">Configuration en cours...</h2>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+          Votre espace de travail est en cours de creation. Cela peut prendre
+          quelques secondes. Rafraichissez la page dans un instant.
+        </p>
+        <Button className="mt-6" nativeButton={false} render={<Link href="/app" />}>
+          Rafraichir
+        </Button>
+      </div>
     </div>
   );
 }

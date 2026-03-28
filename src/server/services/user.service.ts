@@ -17,26 +17,34 @@ export const userService = {
   },
 
   async provisionFromClerk(clerkId: string) {
-    const clerkUser = await currentUser();
-    if (!clerkUser) return null;
+    try {
+      const clerkUser = await currentUser();
+      if (!clerkUser) return null;
 
-    const email =
-      clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
-        ?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
+      const email =
+        clerkUser.emailAddresses.find(
+          (e) => e.id === clerkUser.primaryEmailAddressId,
+        )?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
 
-    if (!email) return null;
+      if (!email) return null;
 
-    const slug = [clerkUser.firstName, clerkUser.lastName]
-      .filter(Boolean)
-      .join('-')
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '')
-      .slice(0, 30);
-    const suffix = clerkId.slice(-6);
-    const finalSlug = slug ? `${slug}-${suffix}` : `workspace-${suffix}`;
+      const existing = await prisma.user.findUnique({
+        where: { clerkId },
+      });
+      if (existing) {
+        return userRepository.findByClerkId(clerkId);
+      }
 
-    return prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
+      const slug = [clerkUser.firstName, clerkUser.lastName]
+        .filter(Boolean)
+        .join('-')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '')
+        .slice(0, 30);
+      const suffix = clerkId.slice(-6);
+      const finalSlug = slug ? `${slug}-${suffix}` : `workspace-${suffix}`;
+
+      const user = await prisma.user.create({
         data: {
           clerkId,
           email,
@@ -46,9 +54,11 @@ export const userService = {
         },
       });
 
-      const workspace = await tx.workspace.create({
+      const workspace = await prisma.workspace.create({
         data: {
-          name: clerkUser.firstName ? `${clerkUser.firstName}'s workspace` : 'Mon espace',
+          name: clerkUser.firstName
+            ? `${clerkUser.firstName}'s workspace`
+            : 'Mon espace',
           slug: finalSlug,
           members: {
             create: { userId: user.id, role: 'OWNER' },
@@ -56,7 +66,7 @@ export const userService = {
         },
       });
 
-      await tx.creditWallet.create({
+      await prisma.creditWallet.create({
         data: {
           workspaceId: workspace.id,
           balance: 20,
@@ -82,12 +92,15 @@ export const userService = {
         },
       });
 
-      await tx.userPreference.create({
+      await prisma.userPreference.create({
         data: { userId: user.id },
       });
 
       return userRepository.findByClerkId(clerkId);
-    });
+    } catch (error) {
+      console.error('[userService.provisionFromClerk] Failed:', error);
+      return null;
+    }
   },
 
   async getCurrentWorkspace() {

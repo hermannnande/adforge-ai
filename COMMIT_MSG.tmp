@@ -1,6 +1,8 @@
-fix: auto-provision user from Clerk if webhook has not fired yet
+fix: remove interactive transaction + add dashboard fallback UI
 
-When the dashboard loads and the user does not yet exist in the
-database (webhook delay or failure), the app now creates the user,
-workspace, credit wallet, and preferences on-the-fly from the
-Clerk session data.
+- Replace $transaction callback with sequential queries (Neon
+  serverless adapter does not support interactive transactions)
+- Add try/catch with a friendly fallback page when workspace
+  provisioning is still in progress
+- Add duplicate-check before creating user to prevent constraint
+  violations
