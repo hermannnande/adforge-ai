@@ -2,10 +2,11 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@clerk/nextjs';
 import type { PlatformTarget } from '@prisma/client';
 import { FolderPlus, Loader2, Plus } from 'lucide-react';
 
-import { createProject } from '@/server/actions/project.actions';
+import { authFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -41,6 +42,7 @@ const PLATFORM_SELECT_ITEMS: Record<string, string> = Object.fromEntries(
 
 function NewProjectForm({ onCreated }: { onCreated: () => void }) {
   const router = useRouter();
+  const { getToken, userId, sessionId } = useAuth();
   const [name, setName] = React.useState('');
   const [platform, setPlatform] = React.useState<PlatformTarget>('FACEBOOK_ADS');
   const [objective, setObjective] = React.useState('');
@@ -58,11 +60,25 @@ function NewProjectForm({ onCreated }: { onCreated: () => void }) {
 
     startTransition(async () => {
       try {
-        await createProject({
-          name: trimmed,
-          platform,
-          objective: objective.trim() || undefined,
-        });
+        const res = await authFetch(
+          '/api/projects',
+          { getToken, userId, sessionId },
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: trimmed,
+              platform,
+              objective: objective.trim() || undefined,
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Erreur serveur');
+        }
+
         setName('');
         setPlatform('FACEBOOK_ADS');
         setObjective('');
