@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import {
   Download,
   FileText,
@@ -56,7 +56,8 @@ function relativeTime(iso: string): string {
 }
 
 export default function DashboardPage() {
-  const { getToken, userId, sessionId, isLoaded, isSignedIn } = useAuth();
+  const { getToken, sessionId, isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export default function DashboardPage() {
     if (!isLoaded || !isSignedIn) return;
     setError(null);
 
-    authFetch('/api/dashboard', { getToken, userId, sessionId })
+    authFetch('/api/dashboard', { getToken, userId: user?.id, sessionId })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.text();
@@ -80,7 +81,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [getToken, isLoaded, isSignedIn, sessionId, userId]);
+  }, [getToken, isLoaded, isSignedIn, sessionId, user?.id]);
 
   if (loading) {
     return (

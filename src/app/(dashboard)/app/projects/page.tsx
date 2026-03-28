@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { LayoutGrid, List, Search, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { authFetch } from '@/lib/api';
@@ -55,18 +55,19 @@ interface ProjectItem {
 }
 
 export default function ProjectsPage() {
-  const { getToken, userId, sessionId, isLoaded, isSignedIn } = useAuth();
+  const { getToken, sessionId, isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
-    authFetch('/api/projects', { getToken, userId, sessionId })
+    authFetch('/api/projects', { getToken, userId: user?.id, sessionId })
       .then((r) => r.json())
       .then((d) => setProjects(d.projects ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [getToken, isLoaded, isSignedIn, sessionId, userId]);
+  }, [getToken, isLoaded, isSignedIn, sessionId, user?.id]);
 
   if (loading) {
     return (

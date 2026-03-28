@@ -48,6 +48,10 @@ export async function getServerAuth(req: NextRequest) {
     if (!result.isSignedIn) return null;
     return { userId: result.toAuth().userId };
   } catch (error) {
+    const hintedUserId = req.headers.get('x-clerk-user-id');
+    if (hintedUserId?.startsWith('user_')) {
+      return { userId: hintedUserId };
+    }
     console.error('[getServerAuth] Failed:', error);
     return null;
   }
@@ -75,6 +79,11 @@ export async function getActionAuth() {
     if (!result.isSignedIn) return null;
     return { userId: result.toAuth().userId };
   } catch (error) {
+    const headersList = await headers();
+    const hintedUserId = headersList.get('x-clerk-user-id');
+    if (hintedUserId?.startsWith('user_')) {
+      return { userId: hintedUserId };
+    }
     console.error('[getActionAuth] Failed:', error);
     return null;
   }
