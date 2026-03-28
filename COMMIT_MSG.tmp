@@ -1,8 +1,7 @@
-fix: all unclickable buttons + Clerk redirect to /app after auth
+fix: use proxy.ts with error-safe route protection
 
-- Replace all Button render={<Link>} with plain <Link> elements
-  across navbar, hero, CTA section, and pricing cards (Base UI
-  Button was not forwarding click events)
-- Add forceRedirectUrl="/app" to ClerkProvider, SignIn, and SignUp
-  so users land on the dashboard after login/registration
-- Make Hero "Générer" button navigate to /register with prompt
+- Switch back to proxy.ts (correct Next.js 16 convention)
+- Add try/catch in proxy handler to redirect to /login on
+  auth failure instead of crashing with 500
+- Remove redundant auth() call from dashboard layout
+- Use createRouteMatcher for explicit /app route protection
