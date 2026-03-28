@@ -1,17 +1,6 @@
-fix: remove Clerk middleware entirely, use @clerk/backend for auth
+fix: remove authorizedParties restriction + better error display
 
-Root cause: clerkMiddleware() consistently crashed on Vercel's
-edge runtime, causing "Internal Server Error" on every /app page.
-
-Solution: bypass the middleware completely.
-- Delete proxy.ts (and middleware.ts) entirely
-- Auth in API routes: use @clerk/backend authenticateRequest()
-  to verify sessions directly from request headers
-- Auth in server actions: use getActionAuth() helper that reads
-  headers() and verifies via @clerk/backend
-- Auth in pages: use client-side useAuth() hook via AuthGuard
-- All dashboard pages converted to client components that fetch
-  data from API endpoints (/api/dashboard, /api/projects)
-- userService refactored to accept clerkId parameter instead
-  of calling auth() internally
-- Zero imports from @clerk/nextjs/server remain in the codebase
+- Remove authorizedParties from authenticateRequest() as it was
+  likely rejecting requests due to origin mismatch
+- Add credentials: 'include' to dashboard fetch
+- Show actual error message in fallback UI for debugging

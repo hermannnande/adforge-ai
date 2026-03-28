@@ -59,12 +59,18 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/dashboard')
+    fetch('/api/dashboard', { credentials: 'include' })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`HTTP ${res.status}: ${body}`);
+        }
         return res.json();
       })
-      .then((d) => setData(d))
+      .then((d) => {
+        if (d.error) throw new Error(d.error);
+        setData(d);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -92,6 +98,9 @@ export default function DashboardPage() {
             Votre espace de travail est en cours de création.
             Rafraîchissez la page dans un instant.
           </p>
+          {error && (
+            <p className="mt-2 max-w-md text-xs text-destructive">{error}</p>
+          )}
           <button
             onClick={() => window.location.reload()}
             className="mt-6 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"

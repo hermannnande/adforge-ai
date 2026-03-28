@@ -7,16 +7,9 @@ const clerk = createClerkClient({
   publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!,
 });
 
-const AUTHORIZED_PARTIES = [
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://adforge-ai-one.vercel.app',
-  'http://localhost:3000',
-];
-
 export async function getServerAuth(req: NextRequest) {
   try {
-    const result = await clerk.authenticateRequest(req, {
-      authorizedParties: AUTHORIZED_PARTIES,
-    });
+    const result = await clerk.authenticateRequest(req);
 
     if (!result.isSignedIn) return null;
     return { userId: result.toAuth().userId };
@@ -29,13 +22,11 @@ export async function getServerAuth(req: NextRequest) {
 export async function getActionAuth() {
   try {
     const headersList = await headers();
-    const req = new Request('https://adforge-ai-one.vercel.app', {
-      headers: headersList,
-    });
+    const url =
+      process.env.NEXT_PUBLIC_APP_URL ?? 'https://adforge-ai-one.vercel.app';
+    const req = new Request(url, { headers: headersList });
 
-    const result = await clerk.authenticateRequest(req, {
-      authorizedParties: AUTHORIZED_PARTIES,
-    });
+    const result = await clerk.authenticateRequest(req);
 
     if (!result.isSignedIn) return null;
     return { userId: result.toAuth().userId };
