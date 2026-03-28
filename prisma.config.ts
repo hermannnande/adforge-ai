@@ -5,7 +5,7 @@ export default defineConfig({
   schema: path.join(__dirname, 'prisma', 'schema.prisma'),
   migrate: {
     async url() {
-      return process.env.DATABASE_URL ?? '';
+      return process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '';
     },
   },
 });
