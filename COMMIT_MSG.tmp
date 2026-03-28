@@ -1,5 +1,7 @@
-fix: replace Button render={<Link>} with plain <Link> in navbar
+fix: add src/proxy.ts with clerkMiddleware for Next.js 16
 
-The Base UI Button with render prop was not forwarding click events
-correctly, making nav links unclickable. Use plain Next.js Link
-elements with matching styles instead.
+Next.js 16 renamed the middleware convention from middleware.ts
+to proxy.ts. This was the root cause of both the previous
+MIDDLEWARE_INVOCATION_FAILED error and the subsequent Clerk
+auth() failure. The proxy file enables Clerk session detection
+for all auth-dependent routes.
