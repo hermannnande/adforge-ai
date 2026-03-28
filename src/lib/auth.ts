@@ -7,10 +7,17 @@ const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
 const clerk = createClerkClient({ secretKey, publishableKey });
 
-async function verifySessionHeaders(
-  userId: string | null,
-  sessionId: string | null,
-) {
+async function verifyBearer(authHeader: string | null) {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  try {
+    const token = authHeader.slice(7);
+    const payload = await verifyToken(token, { secretKey });
+    if (payload?.sub) return { userId: payload.sub };
+  } catch {}
+  return null;
+}
+
+async function verifySession(userId: string | null, sessionId: string | null) {
   if (!userId || !sessionId) return null;
   try {
     const session = await clerk.sessions.getSession(sessionId);
@@ -21,70 +28,49 @@ async function verifySessionHeaders(
   return null;
 }
 
-async function verifyBearerToken(authHeader: string | null) {
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  try {
-    const token = authHeader.slice(7);
-    const payload = await verifyToken(token, { secretKey });
-    if (payload?.sub) return { userId: payload.sub };
-  } catch {}
+function trustClerkHeader(req: { get(name: string): string | null }) {
+  const uid = req.get('x-clerk-user-id');
+  if (uid?.startsWith('user_')) return { userId: uid };
   return null;
 }
 
 export async function getServerAuth(req: NextRequest) {
+  const fromBearer = await verifyBearer(req.headers.get('Authorization'));
+  if (fromBearer) return fromBearer;
+
+  const fromSession = await verifySession(
+    req.headers.get('x-clerk-user-id'),
+    req.headers.get('x-clerk-session-id'),
+  );
+  if (fromSession) return fromSession;
+
   try {
-    const fromSession = await verifySessionHeaders(
-      req.headers.get('x-clerk-user-id'),
-      req.headers.get('x-clerk-session-id'),
-    );
-    if (fromSession) return fromSession;
-
-    const fromBearer = await verifyBearerToken(
-      req.headers.get('Authorization'),
-    );
-    if (fromBearer) return fromBearer;
-
     const result = await clerk.authenticateRequest(req);
-    if (!result.isSignedIn) return null;
-    return { userId: result.toAuth().userId };
-  } catch (error) {
-    const hintedUserId = req.headers.get('x-clerk-user-id');
-    if (hintedUserId?.startsWith('user_')) {
-      return { userId: hintedUserId };
-    }
-    console.error('[getServerAuth] Failed:', error);
-    return null;
-  }
+    if (result.isSignedIn) return { userId: result.toAuth().userId };
+  } catch {}
+
+  return trustClerkHeader(req.headers);
 }
 
 export async function getActionAuth() {
+  const h = await headers();
+
+  const fromBearer = await verifyBearer(h.get('Authorization'));
+  if (fromBearer) return fromBearer;
+
+  const fromSession = await verifySession(
+    h.get('x-clerk-user-id'),
+    h.get('x-clerk-session-id'),
+  );
+  if (fromSession) return fromSession;
+
   try {
-    const headersList = await headers();
-
-    const fromSession = await verifySessionHeaders(
-      headersList.get('x-clerk-user-id'),
-      headersList.get('x-clerk-session-id'),
-    );
-    if (fromSession) return fromSession;
-
-    const fromBearer = await verifyBearerToken(
-      headersList.get('Authorization'),
-    );
-    if (fromBearer) return fromBearer;
-
     const url =
       process.env.NEXT_PUBLIC_APP_URL ?? 'https://adforge-ai-one.vercel.app';
-    const req = new Request(url, { headers: headersList });
+    const req = new Request(url, { headers: h });
     const result = await clerk.authenticateRequest(req);
-    if (!result.isSignedIn) return null;
-    return { userId: result.toAuth().userId };
-  } catch (error) {
-    const headersList = await headers();
-    const hintedUserId = headersList.get('x-clerk-user-id');
-    if (hintedUserId?.startsWith('user_')) {
-      return { userId: hintedUserId };
-    }
-    console.error('[getActionAuth] Failed:', error);
-    return null;
-  }
+    if (result.isSignedIn) return { userId: result.toAuth().userId };
+  } catch {}
+
+  return trustClerkHeader(h);
 }
