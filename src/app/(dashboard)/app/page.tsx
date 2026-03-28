@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
-import { prisma } from '@/lib/db/prisma';
 import { cn } from '@/lib/utils';
 import { userService } from '@/server/services/user.service';
 import type { PlatformTarget } from '@prisma/client';
@@ -72,120 +71,149 @@ function startOfWeekMonday(now: Date): Date {
   return d;
 }
 
-export default async function DashboardPage() {
-  let user;
-  let ctx;
+interface DashboardData {
+  firstName: string;
+  projectsCount: number;
+  projectsThisWeek: number;
+  balance: number;
+  creditsTotal: number;
+  planLabel: string;
+  generationsThisMonth: number;
+  genSubtitle: string;
+  exportsCount: number;
+  exportsThisWeek: number;
+  monthlyBurn: number;
+  creditsProgress: number;
+  recentProjects: {
+    id: string;
+    name: string;
+    platform: string;
+    date: string;
+    gradient: string;
+  }[];
+}
 
+async function loadDashboardData(): Promise<DashboardData | null> {
   try {
-    user = await userService.requireCurrentUser();
-    ctx = await userService.requireCurrentWorkspace();
-  } catch {
+    const ctx = await userService.getCurrentWorkspace();
+    if (!ctx) return null;
+
+    const { prisma } = await import('@/lib/db/prisma');
+    const workspaceId = ctx.workspace.id;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const weekStart = startOfWeekMonday(now);
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const startOfPrevMonth = new Date(y, m - 1, 1);
+    const startOfCurrMonth = new Date(y, m, 1);
+
+    const [
+      projectsCount,
+      recentProjectsRaw,
+      generationsThisMonth,
+      exportsCount,
+      subscription,
+      projectsThisWeek,
+      generationsLastMonth,
+      exportsThisWeek,
+      monthlyBurnAgg,
+    ] = await Promise.all([
+      prisma.project.count({ where: { workspaceId, deletedAt: null } }),
+      prisma.project.findMany({
+        where: { workspaceId, deletedAt: null },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+        include: { settings: true },
+      }),
+      prisma.aiJob.count({
+        where: { workspaceId, createdAt: { gte: startOfMonth } },
+      }),
+      prisma.generatedImage.count({
+        where: { project: { workspaceId, deletedAt: null } },
+      }),
+      prisma.subscription.findUnique({
+        where: { workspaceId },
+        include: { plan: true },
+      }),
+      prisma.project.count({
+        where: { workspaceId, deletedAt: null, createdAt: { gte: weekStart } },
+      }),
+      prisma.aiJob.count({
+        where: {
+          workspaceId,
+          createdAt: { gte: startOfPrevMonth, lt: startOfCurrMonth },
+        },
+      }),
+      prisma.generatedImage.count({
+        where: {
+          project: { workspaceId, deletedAt: null },
+          createdAt: { gte: weekStart },
+        },
+      }),
+      prisma.creditLedgerEntry.aggregate({
+        where: {
+          wallet: { workspaceId },
+          type: 'BURN',
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const balance = ctx.wallet?.balance ?? 0;
+    const creditsTotal = subscription?.plan.credits ?? 20;
+    const planLabel = subscription?.plan.name ?? 'Plan Gratuit';
+    const monthlyBurn = monthlyBurnAgg._sum.amount ?? 0;
+    const creditsProgress = Math.min(
+      100,
+      Math.round((monthlyBurn / Math.max(creditsTotal, 1)) * 100),
+    );
+    const genDelta = generationsThisMonth - generationsLastMonth;
+    const genSubtitle =
+      genDelta > 0
+        ? `+${genDelta} vs mois dernier`
+        : genDelta < 0
+          ? `${genDelta} vs mois dernier`
+          : 'Stable vs mois dernier';
+
+    const recentProjects = recentProjectsRaw.map((project, index) => ({
+      id: project.id,
+      name: project.name,
+      platform: platformLabel(project.settings?.platform),
+      date: relativeTime(project.updatedAt),
+      gradient: PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]!,
+    }));
+
+    return {
+      firstName: ctx.user?.firstName ?? '',
+      projectsCount,
+      projectsThisWeek,
+      balance,
+      creditsTotal,
+      planLabel,
+      generationsThisMonth,
+      genSubtitle,
+      exportsCount,
+      exportsThisWeek,
+      monthlyBurn,
+      creditsProgress,
+      recentProjects,
+    };
+  } catch (error) {
+    console.error('[DashboardPage] Failed to load data:', error);
+    return null;
+  }
+}
+
+export default async function DashboardPage() {
+  const data = await loadDashboardData();
+
+  if (!data) {
     return <DashboardSetupFallback />;
   }
 
-  const workspaceId = ctx.workspace.id;
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const weekStart = startOfWeekMonday(now);
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const startOfPrevMonth = new Date(y, m - 1, 1);
-  const startOfCurrMonth = new Date(y, m, 1);
-
-  const walletFromCtx = ctx.wallet;
-
-  const [
-    projectsCount,
-    recentProjectsRaw,
-    wallet,
-    generationsThisMonth,
-    exportsCount,
-    subscription,
-    projectsThisWeek,
-    generationsLastMonth,
-    exportsThisWeek,
-    monthlyBurnAgg,
-  ] = await Promise.all([
-    prisma.project.count({
-      where: { workspaceId, deletedAt: null },
-    }),
-    prisma.project.findMany({
-      where: { workspaceId, deletedAt: null },
-      orderBy: { updatedAt: 'desc' },
-      take: 3,
-      include: { settings: true },
-    }),
-    walletFromCtx
-      ? Promise.resolve(walletFromCtx)
-      : prisma.creditWallet.findFirst({ where: { workspaceId } }),
-    prisma.aiJob.count({
-      where: {
-        workspaceId,
-        createdAt: { gte: startOfMonth },
-      },
-    }),
-    prisma.generatedImage.count({
-      where: { project: { workspaceId, deletedAt: null } },
-    }),
-    prisma.subscription.findUnique({
-      where: { workspaceId },
-      include: { plan: true },
-    }),
-    prisma.project.count({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        createdAt: { gte: weekStart },
-      },
-    }),
-    prisma.aiJob.count({
-      where: {
-        workspaceId,
-        createdAt: { gte: startOfPrevMonth, lt: startOfCurrMonth },
-      },
-    }),
-    prisma.generatedImage.count({
-      where: {
-        project: { workspaceId, deletedAt: null },
-        createdAt: { gte: weekStart },
-      },
-    }),
-    prisma.creditLedgerEntry.aggregate({
-      where: {
-        wallet: { workspaceId },
-        type: 'BURN',
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { amount: true },
-    }),
-  ]);
-
-  const balance = wallet?.balance ?? 0;
-  const creditsTotal = subscription?.plan.credits ?? 20;
-  const planLabel = subscription?.plan.name ?? 'Plan Gratuit';
-  const monthlyBurn = monthlyBurnAgg._sum.amount ?? 0;
-  const creditsProgress = Math.min(
-    100,
-    Math.round((monthlyBurn / Math.max(creditsTotal, 1)) * 100),
-  );
-
-  const genDelta = generationsThisMonth - generationsLastMonth;
-  const genSubtitle =
-    genDelta > 0
-      ? `+${genDelta} vs mois dernier`
-      : genDelta < 0
-        ? `${genDelta} vs mois dernier`
-        : 'Stable vs mois dernier';
-
-  const recentProjects = recentProjectsRaw.map((project, index) => ({
-    id: project.id,
-    name: project.name,
-    platform: platformLabel(project.settings?.platform),
-    date: relativeTime(project.updatedAt),
-    gradient: PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]!,
-  }));
-
-  const hasProjects = recentProjects.length > 0;
+  const hasProjects = data.recentProjects.length > 0;
 
   return (
     <div className="space-y-10">
@@ -193,7 +221,7 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">
-            Bonjour{user.firstName ? ` ${user.firstName}` : ''} 👋
+            Bonjour{data.firstName ? ` ${data.firstName}` : ''} 👋
           </h1>
           <p className="text-muted-foreground">
             Voici un aperçu de votre activité.
@@ -218,17 +246,19 @@ export default async function DashboardPage() {
             <FolderOpen className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">{projectsCount}</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {data.projectsCount}
+            </p>
             <p
               className={cn(
                 'text-xs',
-                projectsThisWeek > 0
+                data.projectsThisWeek > 0
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-muted-foreground',
               )}
             >
-              {projectsThisWeek > 0
-                ? `+${projectsThisWeek} cette semaine`
+              {data.projectsThisWeek > 0
+                ? `+${data.projectsThisWeek} cette semaine`
                 : 'Aucun nouveau cette semaine'}
             </p>
           </CardContent>
@@ -243,9 +273,9 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-2xl font-bold tabular-nums">
-              {balance} / {creditsTotal}
+              {data.balance} / {data.creditsTotal}
             </p>
-            <p className="text-xs text-muted-foreground">{planLabel}</p>
+            <p className="text-xs text-muted-foreground">{data.planLabel}</p>
           </CardContent>
         </Card>
 
@@ -258,17 +288,17 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-2xl font-bold tabular-nums">
-              {generationsThisMonth}
+              {data.generationsThisMonth}
             </p>
             <p
               className={cn(
                 'text-xs',
-                genDelta > 0
+                data.generationsThisMonth > 0
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : 'text-muted-foreground',
               )}
             >
-              {genSubtitle}
+              {data.genSubtitle}
             </p>
           </CardContent>
         </Card>
@@ -281,10 +311,12 @@ export default async function DashboardPage() {
             <Download className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">{exportsCount}</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {data.exportsCount}
+            </p>
             <p className="text-xs text-muted-foreground">
-              {exportsThisWeek > 0
-                ? `${exportsThisWeek} cette semaine`
+              {data.exportsThisWeek > 0
+                ? `${data.exportsThisWeek} cette semaine`
                 : 'Aucun cette semaine'}
             </p>
           </CardContent>
@@ -293,7 +325,9 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight">Actions rapides</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Actions rapides
+        </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Link
             href="/app/projects?new=true&platform=facebook"
@@ -369,7 +403,7 @@ export default async function DashboardPage() {
 
         {hasProjects ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {recentProjects.map((project) => (
+            {data.recentProjects.map((project) => (
               <Card
                 key={project.id}
                 className="gap-0 overflow-hidden py-0 ring-1 ring-foreground/10"
@@ -431,7 +465,9 @@ export default async function DashboardPage() {
         ) : (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
             <FolderOpen className="size-12 text-muted-foreground/40" />
-            <p className="mt-4 text-sm font-medium">Aucun projet pour le moment</p>
+            <p className="mt-4 text-sm font-medium">
+              Aucun projet pour le moment
+            </p>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
               Créez votre premier projet pour commencer à générer des visuels.
             </p>
@@ -455,10 +491,10 @@ export default async function DashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Progress value={creditsProgress} />
+          <Progress value={data.creditsProgress} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {monthlyBurn} / {creditsTotal} crédits utilisés ce mois
+              {data.monthlyBurn} / {data.creditsTotal} crédits utilisés ce mois
             </p>
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
               Acheter des crédits
@@ -477,11 +513,15 @@ function DashboardSetupFallback() {
         <Sparkles className="mx-auto size-12 text-primary" />
         <h2 className="mt-4 text-xl font-bold">Configuration en cours...</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Votre espace de travail est en cours de creation. Cela peut prendre
-          quelques secondes. Rafraichissez la page dans un instant.
+          Votre espace de travail est en cours de création. Cela peut prendre
+          quelques secondes. Rafraîchissez la page dans un instant.
         </p>
-        <Button className="mt-6" nativeButton={false} render={<Link href="/app" />}>
-          Rafraichir
+        <Button
+          className="mt-6"
+          nativeButton={false}
+          render={<Link href="/app" />}
+        >
+          Rafraîchir
         </Button>
       </div>
     </div>

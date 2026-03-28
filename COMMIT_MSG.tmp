@@ -1,8 +1,6 @@
-fix: remove interactive transaction + add dashboard fallback UI
+fix: add /api/health diagnostic + make dashboard fully resilient
 
-- Replace $transaction callback with sequential queries (Neon
-  serverless adapter does not support interactive transactions)
-- Add try/catch with a friendly fallback page when workspace
-  provisioning is still in progress
-- Add duplicate-check before creating user to prevent constraint
-  violations
+- Add /api/health endpoint to check env vars, Clerk auth, and DB connection
+- Wrap all dashboard data loading in try/catch with fallback UI
+- Add try/catch to layout auth() call
+- Extract loadDashboardData() for cleaner error isolation
