@@ -91,7 +91,7 @@ export class OpenAiProvider implements AiProvider {
   }
 
   isAvailable(): boolean {
-    const key = process.env.OPENAI_API_KEY;
+    const key = this.apiKey ?? process.env.OPENAI_API_KEY;
     return typeof key === 'string' && key.trim().length > 0;
   }
 

@@ -25,44 +25,168 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
+import { prisma } from '@/lib/db/prisma';
 import { cn } from '@/lib/utils';
+import { userService } from '@/server/services/user.service';
+import type { PlatformTarget } from '@prisma/client';
 
-const recentProjects = [
-  {
-    id: 'mock-1',
-    name: 'Campagne Sneakers Pro',
-    platform: 'Facebook Ads',
-    date: 'il y a 2 jours',
-    gradient: 'from-indigo-500 to-purple-600',
-  },
-  {
-    id: 'mock-2',
-    name: 'Menu Restaurant',
-    platform: 'Flyer Print',
-    date: 'il y a 2 jours',
-    gradient: 'from-orange-500 to-red-500',
-  },
-  {
-    id: 'mock-3',
-    name: 'Sérum Beauté',
-    platform: 'Instagram Story',
-    date: 'il y a 2 jours',
-    gradient: 'from-pink-500 to-rose-500',
-  },
+function relativeTime(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `il y a ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `il y a ${days}j`;
+}
+
+const PROJECT_GRADIENTS = [
+  'from-indigo-500 to-purple-600',
+  'from-orange-500 to-red-500',
+  'from-pink-500 to-rose-500',
 ] as const;
 
-const hasProjects = recentProjects.length > 0;
-const creditsTotal = 120;
-const creditsUsed = 47;
-const creditsProgress = Math.round((creditsUsed / creditsTotal) * 100);
+const PLATFORM_LABELS: Record<PlatformTarget, string> = {
+  FACEBOOK_ADS: 'Facebook Ads',
+  INSTAGRAM_FEED: 'Instagram Feed',
+  INSTAGRAM_STORY: 'Instagram Story',
+  TIKTOK_ADS: 'TikTok Ads',
+  WHATSAPP_STATUS: 'WhatsApp',
+  BANNER_WEB: 'Bannière web',
+  FLYER_PRINT: 'Flyer Print',
+  CUSTOM: 'Personnalisé',
+};
 
-export default function DashboardPage() {
+function platformLabel(platform: PlatformTarget | null | undefined): string {
+  if (!platform) return 'Projet';
+  return PLATFORM_LABELS[platform] ?? platform;
+}
+
+function startOfWeekMonday(now: Date): Date {
+  const d = new Date(now);
+  const day = d.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + mondayOffset);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export default async function DashboardPage() {
+  const user = await userService.requireCurrentUser();
+  const ctx = await userService.requireCurrentWorkspace();
+  const workspaceId = ctx.workspace.id;
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const weekStart = startOfWeekMonday(now);
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const startOfPrevMonth = new Date(y, m - 1, 1);
+  const startOfCurrMonth = new Date(y, m, 1);
+
+  const walletFromCtx = ctx.wallet;
+
+  const [
+    projectsCount,
+    recentProjectsRaw,
+    wallet,
+    generationsThisMonth,
+    exportsCount,
+    subscription,
+    projectsThisWeek,
+    generationsLastMonth,
+    exportsThisWeek,
+    monthlyBurnAgg,
+  ] = await Promise.all([
+    prisma.project.count({
+      where: { workspaceId, deletedAt: null },
+    }),
+    prisma.project.findMany({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { updatedAt: 'desc' },
+      take: 3,
+      include: { settings: true },
+    }),
+    walletFromCtx
+      ? Promise.resolve(walletFromCtx)
+      : prisma.creditWallet.findFirst({ where: { workspaceId } }),
+    prisma.aiJob.count({
+      where: {
+        workspaceId,
+        createdAt: { gte: startOfMonth },
+      },
+    }),
+    prisma.generatedImage.count({
+      where: { project: { workspaceId, deletedAt: null } },
+    }),
+    prisma.subscription.findUnique({
+      where: { workspaceId },
+      include: { plan: true },
+    }),
+    prisma.project.count({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        createdAt: { gte: weekStart },
+      },
+    }),
+    prisma.aiJob.count({
+      where: {
+        workspaceId,
+        createdAt: { gte: startOfPrevMonth, lt: startOfCurrMonth },
+      },
+    }),
+    prisma.generatedImage.count({
+      where: {
+        project: { workspaceId, deletedAt: null },
+        createdAt: { gte: weekStart },
+      },
+    }),
+    prisma.creditLedgerEntry.aggregate({
+      where: {
+        wallet: { workspaceId },
+        type: 'BURN',
+        createdAt: { gte: startOfMonth },
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const balance = wallet?.balance ?? 0;
+  const creditsTotal = subscription?.plan.credits ?? 20;
+  const planLabel = subscription?.plan.name ?? 'Plan Gratuit';
+  const monthlyBurn = monthlyBurnAgg._sum.amount ?? 0;
+  const creditsProgress = Math.min(
+    100,
+    Math.round((monthlyBurn / Math.max(creditsTotal, 1)) * 100),
+  );
+
+  const genDelta = generationsThisMonth - generationsLastMonth;
+  const genSubtitle =
+    genDelta > 0
+      ? `+${genDelta} vs mois dernier`
+      : genDelta < 0
+        ? `${genDelta} vs mois dernier`
+        : 'Stable vs mois dernier';
+
+  const recentProjects = recentProjectsRaw.map((project, index) => ({
+    id: project.id,
+    name: project.name,
+    platform: platformLabel(project.settings?.platform),
+    date: relativeTime(project.updatedAt),
+    gradient: PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]!,
+  }));
+
+  const hasProjects = recentProjects.length > 0;
+
   return (
     <div className="space-y-10">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Bonjour 👋</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Bonjour{user.firstName ? ` ${user.firstName}` : ''} 👋
+          </h1>
           <p className="text-muted-foreground">
             Voici un aperçu de votre activité.
           </p>
@@ -86,9 +210,18 @@ export default function DashboardPage() {
             <FolderOpen className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">3</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">
-              +1 cette semaine
+            <p className="text-2xl font-bold tabular-nums">{projectsCount}</p>
+            <p
+              className={cn(
+                'text-xs',
+                projectsThisWeek > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {projectsThisWeek > 0
+                ? `+${projectsThisWeek} cette semaine`
+                : 'Aucun nouveau cette semaine'}
             </p>
           </CardContent>
         </Card>
@@ -101,8 +234,10 @@ export default function DashboardPage() {
             <Sparkles className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">47 / 120</p>
-            <p className="text-xs text-muted-foreground">Plan Starter</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {balance} / {creditsTotal}
+            </p>
+            <p className="text-xs text-muted-foreground">{planLabel}</p>
           </CardContent>
         </Card>
 
@@ -114,9 +249,18 @@ export default function DashboardPage() {
             <ImageIcon className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">18</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">
-              +5 vs mois dernier
+            <p className="text-2xl font-bold tabular-nums">
+              {generationsThisMonth}
+            </p>
+            <p
+              className={cn(
+                'text-xs',
+                genDelta > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {genSubtitle}
             </p>
           </CardContent>
         </Card>
@@ -129,8 +273,12 @@ export default function DashboardPage() {
             <Download className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-2xl font-bold tabular-nums">12</p>
-            <p className="text-xs text-muted-foreground">3 cette semaine</p>
+            <p className="text-2xl font-bold tabular-nums">{exportsCount}</p>
+            <p className="text-xs text-muted-foreground">
+              {exportsThisWeek > 0
+                ? `${exportsThisWeek} cette semaine`
+                : 'Aucun cette semaine'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -143,7 +291,7 @@ export default function DashboardPage() {
             href="/app/projects?new=true&platform=facebook"
             className={cn(
               'flex gap-3 rounded-xl border border-border p-4 transition-colors',
-              'hover:border-primary/50 hover:bg-primary/5'
+              'hover:border-primary/50 hover:bg-primary/5',
             )}
           >
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -163,7 +311,7 @@ export default function DashboardPage() {
             href="/app/projects?new=true&platform=instagram"
             className={cn(
               'flex gap-3 rounded-xl border border-border p-4 transition-colors',
-              'hover:border-primary/50 hover:bg-primary/5'
+              'hover:border-primary/50 hover:bg-primary/5',
             )}
           >
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -181,7 +329,7 @@ export default function DashboardPage() {
             href="/app/projects?new=true&platform=flyer"
             className={cn(
               'flex gap-3 rounded-xl border border-border p-4 transition-colors',
-              'hover:border-primary/50 hover:bg-primary/5'
+              'hover:border-primary/50 hover:bg-primary/5',
             )}
           >
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -221,7 +369,7 @@ export default function DashboardPage() {
                 <div
                   className={cn(
                     'aspect-[4/3] w-full rounded-t-xl bg-gradient-to-br',
-                    project.gradient
+                    project.gradient,
                   )}
                 />
                 <CardContent className="space-y-3 p-4 pt-4">
@@ -251,7 +399,12 @@ export default function DashboardPage() {
                         <span className="sr-only">Actions du projet</span>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem nativeButton={false} render={<Link href={`/app/projects/${project.id}`} />}>
+                        <DropdownMenuItem
+                          nativeButton={false}
+                          render={
+                            <Link href={`/app/projects/${project.id}`} />
+                          }
+                        >
                           Ouvrir
                         </DropdownMenuItem>
                         <DropdownMenuItem>Dupliquer</DropdownMenuItem>
@@ -297,7 +450,7 @@ export default function DashboardPage() {
           <Progress value={creditsProgress} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {creditsUsed} / {creditsTotal} crédits utilisés ce mois
+              {monthlyBurn} / {creditsTotal} crédits utilisés ce mois
             </p>
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
               Acheter des crédits

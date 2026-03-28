@@ -25,6 +25,13 @@ class AiProviderRegistry {
     throw new Error('No text generation provider available');
   }
 
+  /** OpenAI text ; null si aucune clé ou provider indisponible. */
+  getDefaultTextProviderOrNull(): AiProvider | null {
+    const openai = this.providers.get('openai');
+    if (openai?.isAvailable()) return openai;
+    return null;
+  }
+
   getDefaultImageProvider(): AiProvider {
     const replicate = this.providers.get('replicate');
     if (replicate?.isAvailable()) return replicate;

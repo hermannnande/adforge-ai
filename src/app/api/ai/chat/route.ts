@@ -7,30 +7,50 @@ import { processChat } from '@/server/ai/agents';
 import { projectService } from '@/server/services/project.service';
 import { userService } from '@/server/services/user.service';
 
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function serializeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'Internal server error';
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return jsonError('Unauthorized', 401);
     }
 
-    const body = (await req.json()) as { projectId?: string; message?: string };
+    let body: { projectId?: string; message?: string };
+    try {
+      body = (await req.json()) as { projectId?: string; message?: string };
+    } catch {
+      return jsonError('Invalid JSON body', 400);
+    }
+
     const { projectId, message } = body;
 
     if (!projectId || !message?.trim()) {
-      return NextResponse.json({ error: 'Missing projectId or message' }, { status: 400 });
+      return jsonError('Missing projectId or message', 400);
     }
 
     const ctx = await userService.requireCurrentWorkspace();
 
     const project = await projectService.getById(projectId, ctx.workspace.id);
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      return jsonError('Project not found', 404);
     }
 
     const conversation = project.conversations[0];
     if (!conversation) {
-      return NextResponse.json({ error: 'No conversation found' }, { status: 404 });
+      return jsonError('No conversation found', 404);
     }
 
     await projectService.addMessage(conversation.id, ConversationMessageRole.USER, message);
@@ -59,14 +79,31 @@ export async function POST(req: NextRequest) {
       brandKit,
     };
 
-    const response = await processChat(message, chatContext);
+    let response;
+    try {
+      response = await processChat(message, chatContext);
+    } catch (aiError) {
+      console.error('[AI Chat] processChat failed', aiError);
+      await projectService.addMessage(
+        conversation.id,
+        ConversationMessageRole.ASSISTANT,
+        `Le service IA a rencontré un problème : ${serializeError(aiError)}`,
+        { error: true },
+      );
+      return jsonError(serializeError(aiError), 502);
+    }
 
-    await projectService.addMessage(
-      conversation.id,
-      ConversationMessageRole.ASSISTANT,
-      response.message,
-      response.metadata,
-    );
+    try {
+      await projectService.addMessage(
+        conversation.id,
+        ConversationMessageRole.ASSISTANT,
+        response.message,
+        response.metadata,
+      );
+    } catch (persistError) {
+      console.error('[AI Chat] Failed to persist assistant message', persistError);
+      return jsonError('Failed to save assistant message', 500);
+    }
 
     return NextResponse.json({
       message: response.message,
@@ -76,9 +113,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('[AI Chat Error]', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 },
-    );
+    return jsonError(serializeError(error), 500);
   }
 }

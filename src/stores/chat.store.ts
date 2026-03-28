@@ -57,6 +57,22 @@ interface ChatState {
 
 let messageCounter = 0;
 
+async function parseJsonResponse(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text.trim()) {
+    return {};
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(
+      res.ok
+        ? 'Réponse du serveur invalide (JSON attendu).'
+        : `Erreur ${res.status} : ${text.slice(0, 200)}`,
+    );
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
@@ -96,6 +112,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (projectId, content) => {
     const { addMessage, setLoading, setError, setBrief, setStrategy, setShouldGenerate } = get();
 
+    if (!projectId?.trim()) {
+      const errMessage = 'Projet introuvable : identifiant manquant.';
+      setError(errMessage);
+      addMessage({
+        role: 'assistant',
+        content: `Désolé, une erreur est survenue : ${errMessage}`,
+      });
+      return;
+    }
+
     addMessage({ role: 'user', content });
     setLoading(true);
     setError(null);
@@ -107,17 +133,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         body: JSON.stringify({ projectId, message: content }),
       });
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Erreur de communication avec l'IA");
-      }
-
-      const data = (await res.json()) as {
-        message: string;
+      const data = (await parseJsonResponse(res)) as {
+        error?: string;
+        message?: string;
         brief?: Brief | null;
         strategy?: Strategy | null;
         shouldGenerate?: boolean;
       };
+
+      if (!res.ok) {
+        const apiError =
+          typeof data.error === 'string' && data.error.trim()
+            ? data.error
+            : `Erreur ${res.status} : impossible de joindre l'IA.`;
+        throw new Error(apiError);
+      }
+
+      if (typeof data.message !== 'string' || !data.message.trim()) {
+        throw new Error("Réponse de l'IA vide ou invalide.");
+      }
 
       addMessage({ role: 'assistant', content: data.message });
 

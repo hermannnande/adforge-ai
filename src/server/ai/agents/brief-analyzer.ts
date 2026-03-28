@@ -13,7 +13,7 @@ export interface CreativeBrief {
   rawInput: string;
 }
 
-function emptyBrief(rawInput: string): CreativeBrief {
+export function emptyBrief(rawInput: string): CreativeBrief {
   return {
     productName: null,
     productCategory: null,
