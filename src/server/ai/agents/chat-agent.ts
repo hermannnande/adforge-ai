@@ -37,6 +37,26 @@ export interface ChatResponse {
 const UNAVAILABLE_MESSAGE =
   "Le service IA n'est pas configuré. Ajoutez la variable d'environnement OPENAI_API_KEY sur le serveur (ou dans votre fichier .env local), puis redémarrez l'application.";
 
+function humanizeAIError(raw: string): string {
+  if (/429|quota|exceeded|billing/i.test(raw)) {
+    return (
+      "Le quota de l'API IA est épuisé. " +
+      'L\'administrateur doit ajouter des crédits sur platform.openai.com pour rétablir le service. ' +
+      'Vos données de projet sont sauvegardées — réessayez dès que le quota est rechargé.'
+    );
+  }
+  if (/401|invalid.*key|authentication/i.test(raw)) {
+    return "La clé API IA est invalide ou expirée. Contactez l'administrateur.";
+  }
+  if (/timeout|timed?\s*out|ECONNRESET/i.test(raw)) {
+    return "Le service IA met trop de temps à répondre. Réessayez dans quelques instants.";
+  }
+  if (/500|502|503|overloaded|capacity/i.test(raw)) {
+    return "Le service IA est temporairement surchargé. Réessayez dans 1-2 minutes.";
+  }
+  return `Une erreur inattendue s'est produite. Réessayez ou contactez le support si le problème persiste.`;
+}
+
 export async function processChat(userMessage: string, context: ChatContext): Promise<ChatResponse> {
   const provider = aiRegistry.getDefaultTextProviderOrNull();
   if (!provider) {
@@ -127,16 +147,14 @@ ${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
       },
     };
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : 'Erreur inconnue';
+    const raw = error instanceof Error ? error.message : String(error);
+    const friendly = humanizeAIError(raw);
     return {
-      message: `Désolé, une erreur s'est produite avec le service IA. ${errMsg}`,
+      message: friendly,
       brief: brief ?? context.brief ?? emptyBrief(userMessage),
       strategy: strategy ?? context.strategy,
       shouldGenerate: false,
-      metadata: {
-        error: true,
-        message: errMsg,
-      },
+      metadata: { error: true, message: raw },
     };
   }
 }
