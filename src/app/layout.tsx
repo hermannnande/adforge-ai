@@ -70,7 +70,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider localization={frFR}>
+    <ClerkProvider
+      localization={frFR}
+      signInUrl="/login"
+      signUpUrl="/register"
+      signInForceRedirectUrl="/app"
+      signUpForceRedirectUrl="/app"
+    >
       <html
         lang="fr"
         className={`${inter.variable} ${geistSans.variable} ${geistMono.variable}`}

@@ -5,7 +5,6 @@ import { motion } from "framer-motion"
 import { Check } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -148,14 +147,17 @@ export function PricingCards() {
                 </CardContent>
 
                 <CardFooter className="mt-auto border-t bg-transparent pt-4">
-                  <Button
-                    variant={plan.popular ? "default" : "outline"}
-                    className="w-full"
-                    nativeButton={false}
-                    render={<Link href="/register" />}
+                  <Link
+                    href="/register"
+                    className={cn(
+                      "inline-flex h-9 w-full items-center justify-center rounded-md text-sm font-medium transition-colors",
+                      plan.popular
+                        ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                        : "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                    )}
                   >
                     {plan.cta}
-                  </Button>
+                  </Link>
                 </CardFooter>
               </Card>
             </motion.div>

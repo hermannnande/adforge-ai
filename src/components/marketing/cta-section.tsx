@@ -4,7 +4,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const MESH_BLOBS = [
@@ -172,30 +171,25 @@ export function CtaSection() {
               ease: [0.22, 1, 0.36, 1],
             }}
           >
-            <Button
-              size="lg"
-              nativeButton={false}
-              render={<Link href="/register" />}
+            <Link
+              href="/register"
               className={cn(
-                "h-11 min-w-[220px] border-0 bg-white px-6 text-zinc-950",
-                "hover:bg-zinc-100 [a]:hover:bg-zinc-100"
+                "inline-flex h-11 min-w-[220px] items-center justify-center gap-2 rounded-md border-0 bg-white px-6 text-sm font-medium text-zinc-950 transition-colors",
+                "hover:bg-zinc-100"
               )}
             >
               Commencer gratuitement
-              <ArrowRight className="ml-1.5 size-4" data-icon="inline-end" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              nativeButton={false}
-              render={<Link href="/pricing" />}
+              <ArrowRight className="ml-1.5 size-4" />
+            </Link>
+            <Link
+              href="/pricing"
               className={cn(
-                "h-11 min-w-[200px] border border-white/15 bg-transparent text-white",
-                "hover:bg-white/10 hover:text-white [a]:hover:bg-white/10 [a]:hover:text-white"
+                "inline-flex h-11 min-w-[200px] items-center justify-center rounded-md border border-white/15 bg-transparent px-6 text-sm font-medium text-white transition-colors",
+                "hover:bg-white/10 hover:text-white"
               )}
             >
               Voir les tarifs
-            </Button>
+            </Link>
           </motion.div>
 
           <motion.p

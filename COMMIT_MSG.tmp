@@ -1,7 +1,8 @@
-fix: add src/proxy.ts with clerkMiddleware for Next.js 16
+fix: all unclickable buttons + Clerk redirect to /app after auth
 
-Next.js 16 renamed the middleware convention from middleware.ts
-to proxy.ts. This was the root cause of both the previous
-MIDDLEWARE_INVOCATION_FAILED error and the subsequent Clerk
-auth() failure. The proxy file enables Clerk session detection
-for all auth-dependent routes.
+- Replace all Button render={<Link>} with plain <Link> elements
+  across navbar, hero, CTA section, and pricing cards (Base UI
+  Button was not forwarding click events)
+- Add forceRedirectUrl="/app" to ClerkProvider, SignIn, and SignUp
+  so users land on the dashboard after login/registration
+- Make Hero "Générer" button navigate to /register with prompt

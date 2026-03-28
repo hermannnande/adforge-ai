@@ -7,6 +7,7 @@ export default function RegisterPage() {
   return (
     <div className="flex justify-center">
       <SignUp
+        forceRedirectUrl="/app"
         appearance={{
           elements: {
             rootBox: 'w-full max-w-md',

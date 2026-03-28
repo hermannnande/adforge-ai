@@ -10,7 +10,7 @@ import {
 } from "framer-motion"
 import { ArrowRight, Play, Sparkles } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
@@ -109,6 +109,7 @@ const FLOATING_CARDS = [
 
 export function Hero() {
   const [prompt, setPrompt] = useState("")
+  const router = useRouter()
   const sectionRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -207,27 +208,22 @@ export function Hero() {
             className="mt-10 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center"
           >
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                size="lg"
-                className="h-12 w-full gap-2 px-7 shadow-lg shadow-primary/25 sm:w-auto"
-                nativeButton={false}
-                render={<Link href="/register" />}
+              <Link
+                href="/register"
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-7 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90 sm:w-auto"
               >
                 Commencer gratuitement
-                <ArrowRight className="size-4 transition-transform group-hover/button:translate-x-0.5" />
-              </Button>
+                <ArrowRight className="size-4" />
+              </Link>
             </motion.div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-12 w-full gap-2 border-border/80 bg-background/60 px-7 backdrop-blur-md sm:w-auto"
-                nativeButton={false}
-                render={<Link href="/examples" />}
+              <Link
+                href="/examples"
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-border/80 bg-background/60 px-7 text-sm font-medium transition-colors backdrop-blur-md hover:bg-accent hover:text-accent-foreground sm:w-auto"
               >
                 <Play className="size-4 fill-current" />
                 Voir la démo
-              </Button>
+              </Link>
             </motion.div>
           </motion.div>
 
@@ -255,15 +251,17 @@ export function Hero() {
               placeholder="Décrivez votre besoin publicitaire…"
               className="h-12 flex-1 border-0 bg-background/70 text-base shadow-none focus-visible:ring-0 md:h-12 md:text-base"
             />
-            <Button
+            <button
               type="button"
-              size="lg"
-              className="h-12 shrink-0 gap-2 rounded-xl px-6"
-              aria-label="Générer"
+              onClick={() => {
+                const q = prompt.trim()
+                router.push(q ? `/register?prompt=${encodeURIComponent(q)}` : '/register')
+              }}
+              className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               <Sparkles className="size-4" />
               Générer
-            </Button>
+            </button>
           </div>
           <motion.div
             initial={{ opacity: 0 }}

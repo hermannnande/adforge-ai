@@ -7,6 +7,7 @@ export default function LoginPage() {
   return (
     <div className="flex justify-center">
       <SignIn
+        forceRedirectUrl="/app"
         appearance={{
           elements: {
             rootBox: 'w-full max-w-md',
