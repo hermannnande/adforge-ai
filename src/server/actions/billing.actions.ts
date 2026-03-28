@@ -1,10 +1,19 @@
 'use server';
 
 import { PLANS, TOPUP_PACKS } from '@/lib/constants/plans';
+import { getActionAuth } from '@/lib/auth';
 import { getPaymentAdapter } from '@/server/payments';
 import { userService } from '@/server/services/user.service';
 
 export type BillingPaymentProvider = 'stripe' | 'cinetpay';
+
+async function requireWorkspaceAndUser() {
+  const session = await getActionAuth();
+  if (!session) throw new Error('Unauthorized');
+  const ctx = await userService.getWorkspaceByClerkId(session.userId);
+  if (!ctx) throw new Error('No workspace found');
+  return { ctx, user: ctx.user };
+}
 
 function appBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -18,7 +27,9 @@ function stripePriceIdForPlan(slug: string): string {
   };
   const id = map[slug]?.trim();
   if (!id) {
-    throw new Error(`Configuration Stripe incomplète : STRIPE_*_PRICE_ID pour « ${slug} »`);
+    throw new Error(
+      `Configuration Stripe incomplète : STRIPE_*_PRICE_ID pour « ${slug} »`,
+    );
   }
   return id;
 }
@@ -27,8 +38,7 @@ export async function createTopupCheckout(params: {
   packIndex: number;
   provider: BillingPaymentProvider;
 }): Promise<{ url: string }> {
-  const ctx = await userService.requireCurrentWorkspace();
-  const user = await userService.requireCurrentUser();
+  const { ctx, user } = await requireWorkspaceAndUser();
   const pack = TOPUP_PACKS[params.packIndex];
   if (!pack) {
     throw new Error('Pack invalide');
@@ -59,8 +69,7 @@ export async function createCheckoutSession(params: {
   planSlug: string;
   provider: BillingPaymentProvider;
 }): Promise<{ url: string }> {
-  const ctx = await userService.requireCurrentWorkspace();
-  const user = await userService.requireCurrentUser();
+  const { ctx, user } = await requireWorkspaceAndUser();
 
   const slug = params.planSlug.toLowerCase();
   const planEntry =

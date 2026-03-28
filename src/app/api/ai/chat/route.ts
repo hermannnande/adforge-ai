@@ -1,9 +1,9 @@
-import { auth } from '@clerk/nextjs/server';
 import { ConversationMessageRole } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 
 import type { ChatContext, ChatMessage } from '@/server/ai/agents';
 import { processChat } from '@/server/ai/agents';
+import { getServerAuth } from '@/lib/auth';
 import { projectService } from '@/server/services/project.service';
 import { userService } from '@/server/services/user.service';
 
@@ -23,8 +23,8 @@ function serializeError(error: unknown): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerAuth(req);
+    if (!session) {
       return jsonError('Unauthorized', 401);
     }
 
@@ -41,7 +41,10 @@ export async function POST(req: NextRequest) {
       return jsonError('Missing projectId or message', 400);
     }
 
-    const ctx = await userService.requireCurrentWorkspace();
+    const ctx = await userService.getWorkspaceByClerkId(session.userId);
+    if (!ctx) {
+      return jsonError('No workspace found', 404);
+    }
 
     const project = await projectService.getById(projectId, ctx.workspace.id);
     if (!project) {

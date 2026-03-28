@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { getServerAuth } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const checks: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     env: {
       DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'MISSING',
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env
+        .NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         ? `SET (${process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.slice(0, 10)}...)`
         : 'MISSING',
       CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY ? 'SET' : 'MISSING',
@@ -15,8 +16,11 @@ export async function GET() {
   };
 
   try {
-    const { userId } = await auth();
-    checks.clerk = { ok: true, userId: userId ?? 'not-signed-in' };
+    const session = await getServerAuth(req);
+    checks.clerk = {
+      ok: true,
+      userId: session?.userId ?? 'not-signed-in',
+    };
   } catch (e) {
     checks.clerk = { ok: false, error: String(e) };
   }

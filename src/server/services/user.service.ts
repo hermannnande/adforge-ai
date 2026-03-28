@@ -1,16 +1,17 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { createClerkClient } from '@clerk/backend';
 import { prisma } from '@/lib/db/prisma';
 import { userRepository } from '@/server/repositories/user.repository';
 
-export const userService = {
-  async getCurrentUser() {
-    const { userId } = await auth();
-    if (!userId) return null;
+const clerk = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY!,
+});
 
-    let dbUser = await userRepository.findByClerkId(userId);
+export const userService = {
+  async getUserByClerkId(clerkId: string) {
+    let dbUser = await userRepository.findByClerkId(clerkId);
 
     if (!dbUser) {
-      dbUser = await this.provisionFromClerk(userId);
+      dbUser = await this.provisionFromClerk(clerkId);
     }
 
     return dbUser;
@@ -18,7 +19,7 @@ export const userService = {
 
   async provisionFromClerk(clerkId: string) {
     try {
-      const clerkUser = await currentUser();
+      const clerkUser = await clerk.users.getUser(clerkId);
       if (!clerkUser) return null;
 
       const email =
@@ -103,8 +104,8 @@ export const userService = {
     }
   },
 
-  async getCurrentWorkspace() {
-    const user = await this.getCurrentUser();
+  async getWorkspaceByClerkId(clerkId: string) {
+    const user = await this.getUserByClerkId(clerkId);
     if (!user) return null;
 
     const membership = user.workspaceMembers[0];
@@ -116,26 +117,6 @@ export const userService = {
       role: membership.role,
       wallet: membership.workspace.creditWallet,
     };
-  },
-
-  async requireCurrentUser() {
-    const user = await this.getCurrentUser();
-    if (!user) {
-      throw new Error('Unauthorized');
-    }
-    return user;
-  },
-
-  async requireCurrentWorkspace() {
-    const ctx = await this.getCurrentWorkspace();
-    if (!ctx) {
-      throw new Error('No workspace found');
-    }
-    return ctx;
-  },
-
-  async getClerkUser() {
-    return currentUser();
   },
 
   async completeOnboarding(clerkId: string) {

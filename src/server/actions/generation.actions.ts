@@ -4,9 +4,18 @@ import { revalidatePath } from 'next/cache';
 import type { QualityMode } from '@prisma/client';
 
 import type { CreativeBrief, CreativeSuggestion } from '@/server/ai/agents';
+import { getActionAuth } from '@/lib/auth';
 import { creditService } from '@/server/services/credit.service';
 import { generationService } from '@/server/services/generation.service';
 import { userService } from '@/server/services/user.service';
+
+async function requireWorkspace() {
+  const session = await getActionAuth();
+  if (!session) throw new Error('Unauthorized');
+  const ctx = await userService.getWorkspaceByClerkId(session.userId);
+  if (!ctx) throw new Error('No workspace found');
+  return ctx;
+}
 
 export async function generateImage(params: {
   projectId: string;
@@ -15,7 +24,7 @@ export async function generateImage(params: {
   qualityMode: QualityMode;
   platform: string;
 }) {
-  const ctx = await userService.requireCurrentWorkspace();
+  const ctx = await requireWorkspace();
 
   const result = await generationService.generateImage({
     ...params,
@@ -41,11 +50,11 @@ export async function generateImage(params: {
 }
 
 export async function getCreditBalance() {
-  const ctx = await userService.requireCurrentWorkspace();
+  const ctx = await requireWorkspace();
   return creditService.getBalance(ctx.workspace.id);
 }
 
 export async function getCreditWallet() {
-  const ctx = await userService.requireCurrentWorkspace();
+  const ctx = await requireWorkspace();
   return creditService.getWalletWithGrants(ctx.workspace.id);
 }

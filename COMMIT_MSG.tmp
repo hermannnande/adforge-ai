@@ -1,14 +1,17 @@
-fix: definitive fix for auth, buttons, and dashboard
+fix: remove Clerk middleware entirely, use @clerk/backend for auth
 
-Architecture changes:
-- Proxy: stripped to bare clerkMiddleware() with zero custom logic
-  to prevent Internal Server Error on edge runtime
-- Auth: client-side AuthGuard component using useAuth() hook
-  replaces all server-side auth() calls in layouts
-- Dashboard: converted to client component that fetches data
-  from /api/dashboard endpoint (avoids server component crashes)
-- Navbar: replaced Clerk <Show> with useAuth() hook for reliable
-  conditional rendering
-- Hero: removed motion.div wrappers around links that blocked
-  click events, using CSS transitions instead
-- All buttons/links across landing page use plain <Link> elements
+Root cause: clerkMiddleware() consistently crashed on Vercel's
+edge runtime, causing "Internal Server Error" on every /app page.
+
+Solution: bypass the middleware completely.
+- Delete proxy.ts (and middleware.ts) entirely
+- Auth in API routes: use @clerk/backend authenticateRequest()
+  to verify sessions directly from request headers
+- Auth in server actions: use getActionAuth() helper that reads
+  headers() and verifies via @clerk/backend
+- Auth in pages: use client-side useAuth() hook via AuthGuard
+- All dashboard pages converted to client components that fetch
+  data from API endpoints (/api/dashboard, /api/projects)
+- userService refactored to accept clerkId parameter instead
+  of calling auth() internally
+- Zero imports from @clerk/nextjs/server remain in the codebase

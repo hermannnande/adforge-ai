@@ -1,12 +1,13 @@
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { getServerAuth } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 
-export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) {
+export async function POST(req: NextRequest) {
+  const session = await getServerAuth(req);
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const userId = session.userId;
 
   const body = await req.json();
   const { brandName, primaryColor, secondaryColor, objective, platform } = body;

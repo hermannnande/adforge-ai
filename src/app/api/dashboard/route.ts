@@ -1,16 +1,16 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
+import { getServerAuth } from '@/lib/auth';
 import { userService } from '@/server/services/user.service';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await getServerAuth(req);
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const ctx = await userService.getCurrentWorkspace();
+    const ctx = await userService.getWorkspaceByClerkId(session.userId);
     if (!ctx) {
       return NextResponse.json({
         firstName: '',
