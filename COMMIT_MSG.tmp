@@ -1,6 +1,0 @@
-fix: remove authorizedParties restriction + better error display
-
-- Remove authorizedParties from authenticateRequest() as it was
-  likely rejecting requests due to origin mismatch
-- Add credentials: 'include' to dashboard fetch
-- Show actual error message in fallback UI for debugging

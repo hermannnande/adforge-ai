@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { LayoutGrid, List, Search, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { authFetch } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,16 +55,17 @@ interface ProjectItem {
 }
 
 export default function ProjectsPage() {
+  const { getToken } = useAuth();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/projects')
+    authFetch('/api/projects', getToken)
       .then((r) => r.json())
       .then((d) => setProjects(d.projects ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [getToken]);
 
   if (loading) {
     return (

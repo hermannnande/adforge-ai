@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import {
   Download,
   FileText,
@@ -11,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import { authFetch } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
@@ -54,12 +56,13 @@ function relativeTime(iso: string): string {
 }
 
 export default function DashboardPage() {
+  const { getToken } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/dashboard', { credentials: 'include' })
+    authFetch('/api/dashboard', getToken)
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.text();
@@ -73,7 +76,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [getToken]);
 
   if (loading) {
     return (
