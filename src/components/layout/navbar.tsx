@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Show, UserButton } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Logo } from './logo';
+
 import { ThemeToggle } from './theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -39,17 +40,26 @@ export function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <ThemeToggle />
           <Show when="signed-out">
-            <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/login" />}>
+            <Link
+              href="/login"
+              className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
               Se connecter
-            </Button>
-            <Button size="sm" nativeButton={false} render={<Link href="/register" />}>
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            >
               Commencer gratuitement
-            </Button>
+            </Link>
           </Show>
           <Show when="signed-in">
-            <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/app" />}>
+            <Link
+              href="/app"
+              className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
               Dashboard
-            </Button>
+            </Link>
             <UserButton
               appearance={{
                 elements: { avatarBox: 'size-8' },
@@ -99,22 +109,29 @@ export function Navbar() {
               ))}
               <div className="flex flex-col gap-2 pt-3">
                 <Show when="signed-out">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href="/login" />}
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="inline-flex h-9 w-full items-center justify-center rounded-md border border-border bg-background text-sm font-medium transition-colors hover:bg-accent"
                   >
                     Se connecter
-                  </Button>
-                  <Button size="sm" nativeButton={false} render={<Link href="/register" />}>
+                  </Link>
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                  >
                     Commencer gratuitement
-                  </Button>
+                  </Link>
                 </Show>
                 <Show when="signed-in">
-                  <Button size="sm" nativeButton={false} render={<Link href="/app" />}>
+                  <Link
+                    href="/app"
+                    onClick={() => setMobileOpen(false)}
+                    className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                  >
                     Dashboard
-                  </Button>
+                  </Link>
                 </Show>
               </div>
             </div>

@@ -1,6 +1,5 @@
-fix: add /api/health diagnostic + make dashboard fully resilient
+fix: replace Button render={<Link>} with plain <Link> in navbar
 
-- Add /api/health endpoint to check env vars, Clerk auth, and DB connection
-- Wrap all dashboard data loading in try/catch with fallback UI
-- Add try/catch to layout auth() call
-- Extract loadDashboardData() for cleaner error isolation
+The Base UI Button with render prop was not forwarding click events
+correctly, making nav links unclickable. Use plain Next.js Link
+elements with matching styles instead.
