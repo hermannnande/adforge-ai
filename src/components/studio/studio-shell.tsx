@@ -28,23 +28,65 @@ export function StudioShell({
     () => ({ getToken, userId, sessionId }),
     [getToken, userId, sessionId],
   );
+
   const chatReset = useChatStore((s) => s.reset);
+  const brief = useChatStore((s) => s.brief);
+  const strategy = useChatStore((s) => s.strategy);
+  const shouldGenerate = useChatStore((s) => s.shouldGenerate);
+  const selectedSuggestionIndex = useChatStore((s) => s.selectedSuggestionIndex);
+  const setShouldGenerate = useChatStore((s) => s.setShouldGenerate);
+
   const projectReset = useProjectStore((s) => s.reset);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const loadImages = useProjectStore((s) => s.loadImages);
+  const triggerGeneration = useProjectStore((s) => s.triggerGeneration);
+  const isGenerating = useProjectStore((s) => s.isGenerating);
+  const generationError = useProjectStore((s) => s.generationError);
 
   useEffect(() => {
     setCurrentProject(projectId);
+    loadImages(projectId, auth);
     return () => {
       chatReset();
       projectReset();
     };
-  }, [projectId, chatReset, projectReset, setCurrentProject]);
+  }, [projectId, chatReset, projectReset, setCurrentProject, loadImages, auth]);
+
+  useEffect(() => {
+    if (!shouldGenerate || isGenerating || !brief || !strategy) return;
+
+    const suggestion =
+      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
+    if (!suggestion) return;
+
+    setShouldGenerate(false);
+    triggerGeneration(projectId, brief, suggestion, auth, { platform });
+  }, [
+    shouldGenerate,
+    isGenerating,
+    brief,
+    strategy,
+    selectedSuggestionIndex,
+    setShouldGenerate,
+    triggerGeneration,
+    projectId,
+    auth,
+    platform,
+  ]);
 
   const handleGenerate = useCallback(() => {
-    useChatStore
-      .getState()
-      .sendMessage(projectId, 'Génère un visuel avec les paramètres actuels', auth);
-  }, [projectId, auth]);
+    if (!brief || !strategy) {
+      useChatStore
+        .getState()
+        .sendMessage(projectId, 'Génère un visuel avec les paramètres actuels', auth);
+      return;
+    }
+    const suggestion =
+      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
+    if (suggestion) {
+      triggerGeneration(projectId, brief, suggestion, auth, { platform });
+    }
+  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform]);
 
   return (
     <div className="space-y-4">
@@ -69,12 +111,20 @@ export function StudioShell({
         </div>
       </div>
 
+      {/* Generation error banner */}
+      {generationError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+          {generationError}
+        </div>
+      )}
+
       {/* Main layout: Canvas + Chat */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <CanvasPreview
             projectName={projectName}
             onGenerate={handleGenerate}
+            onRegenerate={handleGenerate}
           />
         </div>
 
