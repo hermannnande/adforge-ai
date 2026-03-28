@@ -1,75 +1,25 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import {
   Download,
   FileText,
   FolderOpen,
   ImageIcon,
   Layout,
-  MoreHorizontal,
   Smartphone,
   Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { userService } from '@/server/services/user.service';
-import type { PlatformTarget } from '@prisma/client';
-
-function relativeTime(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 60) return `il y a ${minutes}min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `il y a ${days}j`;
-}
-
-const PROJECT_GRADIENTS = [
-  'from-indigo-500 to-purple-600',
-  'from-orange-500 to-red-500',
-  'from-pink-500 to-rose-500',
-] as const;
-
-const PLATFORM_LABELS: Record<PlatformTarget, string> = {
-  FACEBOOK_ADS: 'Facebook Ads',
-  INSTAGRAM_FEED: 'Instagram Feed',
-  INSTAGRAM_STORY: 'Instagram Story',
-  TIKTOK_ADS: 'TikTok Ads',
-  WHATSAPP_STATUS: 'WhatsApp',
-  BANNER_WEB: 'Bannière web',
-  FLYER_PRINT: 'Flyer Print',
-  CUSTOM: 'Personnalisé',
-};
-
-function platformLabel(platform: PlatformTarget | null | undefined): string {
-  if (!platform) return 'Projet';
-  return PLATFORM_LABELS[platform] ?? platform;
-}
-
-function startOfWeekMonday(now: Date): Date {
-  const d = new Date(now);
-  const day = d.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + mondayOffset);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 interface DashboardData {
   firstName: string;
@@ -93,131 +43,68 @@ interface DashboardData {
   }[];
 }
 
-async function loadDashboardData(): Promise<DashboardData | null> {
-  try {
-    const ctx = await userService.getCurrentWorkspace();
-    if (!ctx) return null;
-
-    const { prisma } = await import('@/lib/db/prisma');
-    const workspaceId = ctx.workspace.id;
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const weekStart = startOfWeekMonday(now);
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const startOfPrevMonth = new Date(y, m - 1, 1);
-    const startOfCurrMonth = new Date(y, m, 1);
-
-    const [
-      projectsCount,
-      recentProjectsRaw,
-      generationsThisMonth,
-      exportsCount,
-      subscription,
-      projectsThisWeek,
-      generationsLastMonth,
-      exportsThisWeek,
-      monthlyBurnAgg,
-    ] = await Promise.all([
-      prisma.project.count({ where: { workspaceId, deletedAt: null } }),
-      prisma.project.findMany({
-        where: { workspaceId, deletedAt: null },
-        orderBy: { updatedAt: 'desc' },
-        take: 3,
-        include: { settings: true },
-      }),
-      prisma.aiJob.count({
-        where: { workspaceId, createdAt: { gte: startOfMonth } },
-      }),
-      prisma.generatedImage.count({
-        where: { project: { workspaceId, deletedAt: null } },
-      }),
-      prisma.subscription.findUnique({
-        where: { workspaceId },
-        include: { plan: true },
-      }),
-      prisma.project.count({
-        where: { workspaceId, deletedAt: null, createdAt: { gte: weekStart } },
-      }),
-      prisma.aiJob.count({
-        where: {
-          workspaceId,
-          createdAt: { gte: startOfPrevMonth, lt: startOfCurrMonth },
-        },
-      }),
-      prisma.generatedImage.count({
-        where: {
-          project: { workspaceId, deletedAt: null },
-          createdAt: { gte: weekStart },
-        },
-      }),
-      prisma.creditLedgerEntry.aggregate({
-        where: {
-          wallet: { workspaceId },
-          type: 'BURN',
-          createdAt: { gte: startOfMonth },
-        },
-        _sum: { amount: true },
-      }),
-    ]);
-
-    const balance = ctx.wallet?.balance ?? 0;
-    const creditsTotal = subscription?.plan.credits ?? 20;
-    const planLabel = subscription?.plan.name ?? 'Plan Gratuit';
-    const monthlyBurn = monthlyBurnAgg._sum.amount ?? 0;
-    const creditsProgress = Math.min(
-      100,
-      Math.round((monthlyBurn / Math.max(creditsTotal, 1)) * 100),
-    );
-    const genDelta = generationsThisMonth - generationsLastMonth;
-    const genSubtitle =
-      genDelta > 0
-        ? `+${genDelta} vs mois dernier`
-        : genDelta < 0
-          ? `${genDelta} vs mois dernier`
-          : 'Stable vs mois dernier';
-
-    const recentProjects = recentProjectsRaw.map((project, index) => ({
-      id: project.id,
-      name: project.name,
-      platform: platformLabel(project.settings?.platform),
-      date: relativeTime(project.updatedAt),
-      gradient: PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]!,
-    }));
-
-    return {
-      firstName: ctx.user?.firstName ?? '',
-      projectsCount,
-      projectsThisWeek,
-      balance,
-      creditsTotal,
-      planLabel,
-      generationsThisMonth,
-      genSubtitle,
-      exportsCount,
-      exportsThisWeek,
-      monthlyBurn,
-      creditsProgress,
-      recentProjects,
-    };
-  } catch (error) {
-    console.error('[DashboardPage] Failed to load data:', error);
-    return null;
-  }
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `il y a ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `il y a ${days}j`;
 }
 
-export default async function DashboardPage() {
-  const data = await loadDashboardData();
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!data) {
-    return <DashboardSetupFallback />;
+  useEffect(() => {
+    fetch('/api/dashboard')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((d) => setData(d))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">
+            Chargement du tableau de bord...
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const hasProjects = data.recentProjects.length > 0;
+  if (error || !data) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+        <div className="rounded-xl border border-border bg-card p-10 shadow-sm">
+          <Sparkles className="mx-auto size-12 text-primary" />
+          <h2 className="mt-4 text-xl font-bold">Configuration en cours...</h2>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            Votre espace de travail est en cours de création.
+            Rafraîchissez la page dans un instant.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-6 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Rafraîchir
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">
@@ -227,16 +114,14 @@ export default async function DashboardPage() {
             Voici un aperçu de votre activité.
           </p>
         </div>
-        <Button
-          nativeButton={false}
-          render={<Link href="/app/projects?new=true" />}
-          className="shrink-0"
+        <Link
+          href="/app/projects?new=true"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           Nouveau projet
-        </Button>
+        </Link>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -290,14 +175,7 @@ export default async function DashboardPage() {
             <p className="text-2xl font-bold tabular-nums">
               {data.generationsThisMonth}
             </p>
-            <p
-              className={cn(
-                'text-xs',
-                data.generationsThisMonth > 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-muted-foreground',
-              )}
-            >
+            <p className="text-xs text-muted-foreground">
               {data.genSubtitle}
             </p>
           </CardContent>
@@ -323,7 +201,6 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick actions */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">
           Actions rapides
@@ -387,7 +264,6 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Recent projects */}
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold tracking-tight">
@@ -401,7 +277,7 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {hasProjects ? (
+        {data.recentProjects.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {data.recentProjects.map((project) => (
               <Card
@@ -415,47 +291,16 @@ export default async function DashboardPage() {
                   )}
                 />
                 <CardContent className="space-y-3 p-4 pt-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-1">
-                      <Link
-                        href={`/app/projects/${project.id}`}
-                        className="font-semibold leading-snug hover:text-primary hover:underline"
-                      >
-                        {project.name}
-                      </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {project.date}
-                      </p>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="size-8 shrink-0"
-                          />
-                        }
-                      >
-                        <MoreHorizontal className="size-4" />
-                        <span className="sr-only">Actions du projet</span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          nativeButton={false}
-                          render={
-                            <Link href={`/app/projects/${project.id}`} />
-                          }
-                        >
-                          Ouvrir
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>Dupliquer</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive">
-                          Supprimer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <div className="min-w-0 space-y-1">
+                    <Link
+                      href={`/app/projects/${project.id}`}
+                      className="font-semibold leading-snug hover:text-primary hover:underline"
+                    >
+                      {project.name}
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      {relativeTime(project.date)}
+                    </p>
                   </div>
                   <Badge variant="secondary">{project.platform}</Badge>
                 </CardContent>
@@ -471,19 +316,16 @@ export default async function DashboardPage() {
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
               Créez votre premier projet pour commencer à générer des visuels.
             </p>
-            <Button
-              className="mt-4"
-              size="sm"
-              nativeButton={false}
-              render={<Link href="/app/projects?new=true" />}
+            <Link
+              href="/app/projects?new=true"
+              className="mt-4 inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               Créer un projet
-            </Button>
+            </Link>
           </div>
         )}
       </section>
 
-      {/* Credits usage */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
@@ -496,34 +338,15 @@ export default async function DashboardPage() {
             <p className="text-sm text-muted-foreground">
               {data.monthlyBurn} / {data.creditsTotal} crédits utilisés ce mois
             </p>
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+            <Link
+              href="/app/billing"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
               Acheter des crédits
-            </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function DashboardSetupFallback() {
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="rounded-xl border border-border bg-card p-10 shadow-sm">
-        <Sparkles className="mx-auto size-12 text-primary" />
-        <h2 className="mt-4 text-xl font-bold">Configuration en cours...</h2>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Votre espace de travail est en cours de création. Cela peut prendre
-          quelques secondes. Rafraîchissez la page dans un instant.
-        </p>
-        <Button
-          className="mt-6"
-          nativeButton={false}
-          render={<Link href="/app" />}
-        >
-          Rafraîchir
-        </Button>
-      </div>
     </div>
   );
 }

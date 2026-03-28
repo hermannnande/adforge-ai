@@ -1,7 +1,14 @@
-fix: use proxy.ts with error-safe route protection
+fix: definitive fix for auth, buttons, and dashboard
 
-- Switch back to proxy.ts (correct Next.js 16 convention)
-- Add try/catch in proxy handler to redirect to /login on
-  auth failure instead of crashing with 500
-- Remove redundant auth() call from dashboard layout
-- Use createRouteMatcher for explicit /app route protection
+Architecture changes:
+- Proxy: stripped to bare clerkMiddleware() with zero custom logic
+  to prevent Internal Server Error on edge runtime
+- Auth: client-side AuthGuard component using useAuth() hook
+  replaces all server-side auth() calls in layouts
+- Dashboard: converted to client component that fetches data
+  from /api/dashboard endpoint (avoids server component crashes)
+- Navbar: replaced Clerk <Show> with useAuth() hook for reliable
+  conditional rendering
+- Hero: removed motion.div wrappers around links that blocked
+  click events, using CSS transitions instead
+- All buttons/links across landing page use plain <Link> elements

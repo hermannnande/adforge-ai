@@ -4,10 +4,9 @@ import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Show, UserButton } from '@clerk/nextjs';
+import { useAuth, UserButton } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Logo } from './logo';
-
 import { ThemeToggle } from './theme-toggle';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +18,7 @@ const NAV_LINKS = [
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isSignedIn } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-lg">
@@ -39,47 +39,54 @@ export function Navbar() {
 
         <div className="hidden items-center gap-3 md:flex">
           <ThemeToggle />
-          <Show when="signed-out">
-            <Link
-              href="/login"
-              className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Se connecter
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-            >
-              Commencer gratuitement
-            </Link>
-          </Show>
-          <Show when="signed-in">
-            <Link
-              href="/app"
-              className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Dashboard
-            </Link>
-            <UserButton
-              appearance={{
-                elements: { avatarBox: 'size-8' },
-              }}
-            />
-          </Show>
+          {isSignedIn ? (
+            <>
+              <Link
+                href="/app"
+                className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Dashboard
+              </Link>
+              <UserButton
+                appearance={{
+                  elements: { avatarBox: 'size-8' },
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Se connecter
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+              >
+                Commencer gratuitement
+              </Link>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
           <ThemeToggle />
-          <Show when="signed-in">
+          {isSignedIn && (
             <UserButton appearance={{ elements: { avatarBox: 'size-8' } }} />
-          </Show>
+          )}
           <Button
             variant="ghost"
             size="icon"
             className="size-9"
             onClick={() => setMobileOpen(!mobileOpen)}
           >
-            {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            {mobileOpen ? (
+              <X className="size-5" />
+            ) : (
+              <Menu className="size-5" />
+            )}
           </Button>
         </div>
       </nav>
@@ -108,23 +115,7 @@ export function Navbar() {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-3">
-                <Show when="signed-out">
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileOpen(false)}
-                    className="inline-flex h-9 w-full items-center justify-center rounded-md border border-border bg-background text-sm font-medium transition-colors hover:bg-accent"
-                  >
-                    Se connecter
-                  </Link>
-                  <Link
-                    href="/register"
-                    onClick={() => setMobileOpen(false)}
-                    className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                  >
-                    Commencer gratuitement
-                  </Link>
-                </Show>
-                <Show when="signed-in">
+                {isSignedIn ? (
                   <Link
                     href="/app"
                     onClick={() => setMobileOpen(false)}
@@ -132,7 +123,24 @@ export function Navbar() {
                   >
                     Dashboard
                   </Link>
-                </Show>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileOpen(false)}
+                      className="inline-flex h-9 w-full items-center justify-center rounded-md border border-border bg-background text-sm font-medium transition-colors hover:bg-accent"
+                    >
+                      Se connecter
+                    </Link>
+                    <Link
+                      href="/register"
+                      onClick={() => setMobileOpen(false)}
+                      className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                    >
+                      Commencer gratuitement
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

@@ -207,24 +207,20 @@ export function Hero() {
             transition={{ delay: 0.68, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="mt-10 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center"
           >
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Link
-                href="/register"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-7 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-colors hover:bg-primary/90 sm:w-auto"
-              >
-                Commencer gratuitement
-                <ArrowRight className="size-4" />
-              </Link>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Link
-                href="/examples"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-border/80 bg-background/60 px-7 text-sm font-medium transition-colors backdrop-blur-md hover:bg-accent hover:text-accent-foreground sm:w-auto"
-              >
-                <Play className="size-4 fill-current" />
-                Voir la démo
-              </Link>
-            </motion.div>
+            <Link
+              href="/register"
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-primary px-7 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:scale-[1.03] active:scale-[0.98] sm:w-auto"
+            >
+              Commencer gratuitement
+              <ArrowRight className="size-4" />
+            </Link>
+            <Link
+              href="/examples"
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-border/80 bg-background/60 px-7 text-sm font-medium transition-all backdrop-blur-md hover:bg-accent hover:text-accent-foreground hover:scale-[1.02] active:scale-[0.98] sm:w-auto"
+            >
+              <Play className="size-4 fill-current" />
+              Voir la démo
+            </Link>
           </motion.div>
 
           <motion.p
