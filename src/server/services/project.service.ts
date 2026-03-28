@@ -73,6 +73,13 @@ export const projectService = {
     });
   },
 
+  async getSummary(projectId: string, workspaceId: string) {
+    return prisma.project.findFirst({
+      where: { id: projectId, workspaceId, deletedAt: null },
+      include: { settings: { select: { platform: true } } },
+    });
+  },
+
   async softDelete(projectId: string, workspaceId: string) {
     await prisma.project.updateMany({
       where: {

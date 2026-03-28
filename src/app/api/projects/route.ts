@@ -31,17 +31,24 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      projects: projects.map((p) => ({
-        id: p.id,
-        name: p.name,
-        platform: p.settings?.platform ?? null,
-        updatedAt: p.updatedAt.toISOString(),
-        imageCount: p._count.generatedImages,
-      })),
-      total: projects.length,
-      workspaceId: ctx.workspace.id,
-    });
+    return NextResponse.json(
+      {
+        projects: projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          platform: p.settings?.platform ?? null,
+          updatedAt: p.updatedAt.toISOString(),
+          imageCount: p._count.generatedImages,
+        })),
+        total: projects.length,
+        workspaceId: ctx.workspace.id,
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=5, stale-while-revalidate=20',
+        },
+      },
+    );
   } catch (error) {
     console.error('[/api/projects GET] Error:', error);
     return NextResponse.json(

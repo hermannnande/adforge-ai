@@ -19,19 +19,26 @@ export async function GET(
     }
 
     const { projectId } = await params;
-    const project = await projectService.getById(projectId, ctx.workspace.id);
+    const project = await projectService.getSummary(projectId, ctx.workspace.id);
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      id: project.id,
-      name: project.name,
-      platform: project.settings?.platform ?? 'CUSTOM',
-      status: project.status,
-      createdAt: project.createdAt.toISOString(),
-      updatedAt: project.updatedAt.toISOString(),
-    });
+    return NextResponse.json(
+      {
+        id: project.id,
+        name: project.name,
+        platform: project.settings?.platform ?? 'CUSTOM',
+        status: project.status,
+        createdAt: project.createdAt.toISOString(),
+        updatedAt: project.updatedAt.toISOString(),
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=10, stale-while-revalidate=30',
+        },
+      },
+    );
   } catch (error) {
     console.error('[/api/projects/[id] GET]', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
