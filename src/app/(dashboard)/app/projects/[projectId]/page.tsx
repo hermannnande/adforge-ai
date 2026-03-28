@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { authFetch } from '@/lib/api';
@@ -13,7 +14,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   INSTAGRAM_STORY: 'Instagram — story',
   TIKTOK_ADS: 'TikTok Ads',
   FLYER_PRINT: 'Flyer / print',
-  CUSTOM: 'Generique',
+  CUSTOM: 'Générique',
 };
 
 interface ProjectData {
@@ -31,6 +32,8 @@ export default function ProjectPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
+  const searchParams = useSearchParams();
+  const initialPrompt = searchParams.get('prompt') ?? undefined;
   const { getToken, userId, sessionId, isLoaded, isSignedIn } = useAuth();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +57,9 @@ export default function ProjectPage({
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="size-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Chargement du projet...</p>
+          <p className="text-sm text-muted-foreground">
+            Chargement du projet...
+          </p>
         </div>
       </div>
     );
@@ -63,7 +68,9 @@ export default function ProjectPage({
   if (error || !project) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-        <p className="text-sm text-destructive">{error ?? 'Projet introuvable'}</p>
+        <p className="text-sm text-destructive">
+          {error ?? 'Projet introuvable'}
+        </p>
         <Link
           href="/app/projects"
           className="text-sm text-primary underline-offset-4 hover:underline"
@@ -75,7 +82,7 @@ export default function ProjectPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <Link
           href="/app/projects"
@@ -89,11 +96,8 @@ export default function ProjectPage({
         projectId={project.id}
         projectName={project.name}
         platform={PLATFORM_LABELS[project.platform] ?? project.platform}
+        initialPrompt={initialPrompt}
       />
-
-      <p className="text-center text-xs text-muted-foreground">
-        ID projet : {project.id}
-      </p>
     </div>
   );
 }
