@@ -7,6 +7,20 @@ const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
 const clerk = createClerkClient({ secretKey, publishableKey });
 
+async function verifySessionHeaders(
+  userId: string | null,
+  sessionId: string | null,
+) {
+  if (!userId || !sessionId) return null;
+  try {
+    const session = await clerk.sessions.getSession(sessionId);
+    if (session.userId === userId && session.status === 'active') {
+      return { userId };
+    }
+  } catch {}
+  return null;
+}
+
 async function verifyBearerToken(authHeader: string | null) {
   if (!authHeader?.startsWith('Bearer ')) return null;
   try {
@@ -19,6 +33,12 @@ async function verifyBearerToken(authHeader: string | null) {
 
 export async function getServerAuth(req: NextRequest) {
   try {
+    const fromSession = await verifySessionHeaders(
+      req.headers.get('x-clerk-user-id'),
+      req.headers.get('x-clerk-session-id'),
+    );
+    if (fromSession) return fromSession;
+
     const fromBearer = await verifyBearerToken(
       req.headers.get('Authorization'),
     );
@@ -36,6 +56,12 @@ export async function getServerAuth(req: NextRequest) {
 export async function getActionAuth() {
   try {
     const headersList = await headers();
+
+    const fromSession = await verifySessionHeaders(
+      headersList.get('x-clerk-user-id'),
+      headersList.get('x-clerk-session-id'),
+    );
+    if (fromSession) return fromSession;
 
     const fromBearer = await verifyBearerToken(
       headersList.get('Authorization'),

@@ -56,13 +56,13 @@ function relativeTime(iso: string): string {
 }
 
 export default function DashboardPage() {
-  const { getToken } = useAuth();
+  const { getToken, userId, sessionId } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    authFetch('/api/dashboard', getToken)
+    authFetch('/api/dashboard', { getToken, userId, sessionId })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.text();
@@ -76,7 +76,7 @@ export default function DashboardPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [getToken]);
+  }, [getToken, sessionId, userId]);
 
   if (loading) {
     return (
