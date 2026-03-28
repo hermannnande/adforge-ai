@@ -1,22 +1,19 @@
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { PrismaNeon } from '@prisma/adapter-neon';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DATABASE_URL;
 
-  if (!connectionString) {
-    const pool = new Pool({ connectionString: 'postgresql://localhost/noop' });
-    const adapter = new PrismaPg(pool);
+  if (!databaseUrl) {
+    const adapter = new PrismaNeon({ connectionString: 'postgresql://localhost/noop' });
     return new PrismaClient({ adapter });
   }
 
-  const pool = new Pool({ connectionString });
-  const adapter = new PrismaPg(pool);
+  const adapter = new PrismaNeon({ connectionString: databaseUrl });
   return new PrismaClient({ adapter });
 }
 
