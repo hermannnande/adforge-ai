@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { authFetch } from '@/lib/api';
 
 export interface ChatMessage {
   id: string;
@@ -6,6 +7,12 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   metadata?: Record<string, unknown>;
+}
+
+export interface ChatAuthInfo {
+  getToken: () => Promise<string | null>;
+  userId?: string | null;
+  sessionId?: string | null;
 }
 
 interface Brief {
@@ -52,7 +59,7 @@ interface ChatState {
   setSelectedSuggestion: (index: number) => void;
   reset: () => void;
 
-  sendMessage: (projectId: string, content: string) => Promise<void>;
+  sendMessage: (projectId: string, content: string, auth?: ChatAuthInfo) => Promise<void>;
 }
 
 let messageCounter = 0;
@@ -109,7 +116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       selectedSuggestionIndex: 0,
     }),
 
-  sendMessage: async (projectId, content) => {
+  sendMessage: async (projectId, content, auth) => {
     const { addMessage, setLoading, setError, setBrief, setStrategy, setShouldGenerate } = get();
 
     if (!projectId?.trim()) {
@@ -127,11 +134,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setError(null);
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const fetchOpts: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, message: content }),
-      });
+      };
+
+      const res = auth
+        ? await authFetch('/api/ai/chat', auth, fetchOpts)
+        : await fetch('/api/ai/chat', fetchOpts);
 
       const data = (await parseJsonResponse(res)) as {
         error?: string;

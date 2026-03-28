@@ -1,10 +1,11 @@
 'use client';
 
-import { useRef, useEffect, useState, type FormEvent } from 'react';
+import { useRef, useEffect, useState, useMemo, type FormEvent } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { ArrowUp, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useChatStore } from '@/stores/chat.store';
+import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
 import { cn } from '@/lib/utils';
 
 const QUICK_PROMPTS = [
@@ -18,6 +19,11 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ projectId }: ChatPanelProps) {
+  const { getToken, userId, sessionId } = useAuth();
+  const auth = useMemo<ChatAuthInfo>(
+    () => ({ getToken, userId, sessionId }),
+    [getToken, userId, sessionId],
+  );
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,13 +41,13 @@ export function ChatPanel({ projectId }: ChatPanelProps) {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
     setInput('');
-    await sendMessage(projectId, trimmed);
+    await sendMessage(projectId, trimmed, auth);
     inputRef.current?.focus();
   };
 
   const handleQuickPrompt = async (prompt: string) => {
     if (isLoading) return;
-    await sendMessage(projectId, prompt);
+    await sendMessage(projectId, prompt, auth);
   };
 
   return (

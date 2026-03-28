@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { Download, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ChatPanel } from './chat-panel';
 import { CanvasPreview } from './canvas-preview';
-import { useChatStore } from '@/stores/chat.store';
+import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
 import { useProjectStore } from '@/stores/project.store';
 
 interface StudioShellProps {
@@ -17,6 +18,11 @@ interface StudioShellProps {
 }
 
 export function StudioShell({ projectId, projectName, platform }: StudioShellProps) {
+  const { getToken, userId, sessionId } = useAuth();
+  const auth = useMemo<ChatAuthInfo>(
+    () => ({ getToken, userId, sessionId }),
+    [getToken, userId, sessionId],
+  );
   const chatReset = useChatStore((s) => s.reset);
   const projectReset = useProjectStore((s) => s.reset);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
@@ -32,8 +38,8 @@ export function StudioShell({ projectId, projectName, platform }: StudioShellPro
   const handleGenerate = useCallback(() => {
     useChatStore
       .getState()
-      .sendMessage(projectId, 'Génère un visuel avec les paramètres actuels');
-  }, [projectId]);
+      .sendMessage(projectId, 'Génère un visuel avec les paramètres actuels', auth);
+  }, [projectId, auth]);
 
   return (
     <div className="space-y-6">

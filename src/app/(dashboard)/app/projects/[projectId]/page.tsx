@@ -1,16 +1,78 @@
-import type { Metadata } from 'next';
+'use client';
+
+import { useEffect, useState, use } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
+import { authFetch } from '@/lib/api';
 import { StudioShell } from '@/components/studio/studio-shell';
 
-export const metadata: Metadata = { title: 'Studio' };
+const PLATFORM_LABELS: Record<string, string> = {
+  FACEBOOK_ADS: 'Facebook Ads',
+  INSTAGRAM_FEED: 'Instagram — fil',
+  INSTAGRAM_STORY: 'Instagram — story',
+  TIKTOK_ADS: 'TikTok Ads',
+  FLYER_PRINT: 'Flyer / print',
+  CUSTOM: 'Generique',
+};
 
-export default async function ProjectPage({
+interface ProjectData {
+  id: string;
+  name: string;
+  platform: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export default function ProjectPage({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const { projectId } = await params;
+  const { projectId } = use(params);
+  const { getToken, userId, sessionId, isLoaded, isSignedIn } = useAuth();
+  const [project, setProject] = useState<ProjectData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+
+    authFetch(`/api/projects/${projectId}`, { getToken, userId, sessionId })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Erreur ${res.status}`);
+        return res.json();
+      })
+      .then((d) => setProject(d))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [getToken, isLoaded, isSignedIn, projectId, sessionId, userId]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="size-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Chargement du projet...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+        <p className="text-sm text-destructive">{error ?? 'Projet introuvable'}</p>
+        <Link
+          href="/app/projects"
+          className="text-sm text-primary underline-offset-4 hover:underline"
+        >
+          Retour aux projets
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -24,42 +86,14 @@ export default async function ProjectPage({
       </div>
 
       <StudioShell
-        projectId={projectId}
-        projectName="Campagne Sneakers Pro"
-        platform="Facebook Ads"
+        projectId={project.id}
+        projectName={project.name}
+        platform={PLATFORM_LABELS[project.platform] ?? project.platform}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Détails du projet</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Créé le</p>
-              <p className="text-sm">26 mars 2026</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Dernière modification</p>
-              <p className="text-sm">il y a 2h</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Crédits utilisés</p>
-              <p className="text-sm">4</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Format</p>
-              <p className="text-sm">1080 × 1080 (1:1)</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Qualité</p>
-              <p className="text-sm">Standard</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <p className="text-center text-xs text-muted-foreground">ID projet : {projectId}</p>
+      <p className="text-center text-xs text-muted-foreground">
+        ID projet : {project.id}
+      </p>
     </div>
   );
 }

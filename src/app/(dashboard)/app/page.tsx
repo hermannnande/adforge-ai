@@ -66,11 +66,6 @@ export default function DashboardPage() {
     if (!isLoaded || !isSignedIn) return;
     setError(null);
 
-    authFetch('/api/debug-auth', { getToken, userId: user?.id, sessionId })
-      .then((r) => r.json())
-      .then((d) => console.log('[DEBUG-AUTH]', JSON.stringify(d)))
-      .catch(() => {});
-
     authFetch('/api/dashboard', { getToken, userId: user?.id, sessionId })
       .then(async (res) => {
         if (!res.ok) {
@@ -81,7 +76,6 @@ export default function DashboardPage() {
       })
       .then((d) => {
         if (d.error) throw new Error(d.error);
-        setError(null);
         setData(d);
       })
       .catch((err) => setError(err.message))
