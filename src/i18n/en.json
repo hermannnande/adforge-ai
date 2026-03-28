@@ -1,0 +1,58 @@
+{
+  "common": {
+    "appName": "AdForge AI",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "confirm": "Confirm",
+    "retry": "Retry"
+  },
+  "nav": {
+    "home": "Home",
+    "pricing": "Pricing",
+    "examples": "Examples",
+    "faq": "FAQ",
+    "login": "Log in",
+    "register": "Sign up",
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "library": "Library",
+    "brandKits": "Brand Kits",
+    "templates": "Templates",
+    "billing": "Billing",
+    "settings": "Settings",
+    "support": "Support"
+  },
+  "hero": {
+    "title": "Create ad posters that sell",
+    "subtitle": "A conversational AI agent guides you from idea to final visual. Generate realistic creations, ready for Facebook, Instagram, TikTok and more.",
+    "cta": "Start for free",
+    "ctaSecondary": "See examples",
+    "inputPlaceholder": "Describe your advertising need..."
+  },
+  "studio": {
+    "newProject": "New project",
+    "regenerate": "Regenerate",
+    "moreRealistic": "More realistic",
+    "lesserText": "Less text",
+    "morePremium": "More premium",
+    "moreSelling": "More selling",
+    "exporting": "Exporting..."
+  },
+  "billing": {
+    "credits": "credits",
+    "perMonth": "/ month",
+    "currentPlan": "Current plan",
+    "upgrade": "Change plan",
+    "topUp": "Top up",
+    "history": "History"
+  }
+}

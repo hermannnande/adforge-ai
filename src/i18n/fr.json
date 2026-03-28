@@ -1,0 +1,58 @@
+{
+  "common": {
+    "appName": "AdForge AI",
+    "loading": "Chargement...",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "search": "Rechercher",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "retry": "Réessayer"
+  },
+  "nav": {
+    "home": "Accueil",
+    "pricing": "Tarifs",
+    "examples": "Exemples",
+    "faq": "FAQ",
+    "login": "Se connecter",
+    "register": "Créer un compte",
+    "dashboard": "Tableau de bord",
+    "projects": "Projets",
+    "library": "Bibliothèque",
+    "brandKits": "Brand Kits",
+    "templates": "Templates",
+    "billing": "Facturation",
+    "settings": "Paramètres",
+    "support": "Support"
+  },
+  "hero": {
+    "title": "Créez des affiches publicitaires qui vendent",
+    "subtitle": "Un agent IA conversationnel vous guide de l'idée au visuel final. Générez des créations réalistes, prêtes pour Facebook, Instagram, TikTok et plus.",
+    "cta": "Commencer gratuitement",
+    "ctaSecondary": "Voir des exemples",
+    "inputPlaceholder": "Décrivez votre besoin publicitaire..."
+  },
+  "studio": {
+    "newProject": "Nouveau projet",
+    "regenerate": "Régénérer",
+    "moreRealistic": "Plus réaliste",
+    "lesserText": "Moins de texte",
+    "morePremium": "Plus premium",
+    "moreSelling": "Plus vendeur",
+    "exporting": "Export en cours..."
+  },
+  "billing": {
+    "credits": "crédits",
+    "perMonth": "/ mois",
+    "currentPlan": "Plan actuel",
+    "upgrade": "Changer de plan",
+    "topUp": "Recharger",
+    "history": "Historique"
+  }
+}

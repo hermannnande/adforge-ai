@@ -1,0 +1,868 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum JobStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  CINETPAY
+  MANUAL
+}
+
+enum CreditEntryType {
+  GRANT
+  BURN
+  REFUND
+  EXPIRE
+  ADJUST
+}
+
+enum AssetType {
+  LOGO
+  PRODUCT_IMAGE
+  BACKGROUND
+  REFERENCE
+  GENERATED
+  EXPORT
+  OTHER
+}
+
+enum ExportFormat {
+  PNG
+  JPG
+  WEBP
+  PDF
+}
+
+enum ModerationStatus {
+  CLEAN
+  FLAGGED
+  BLOCKED
+  REVIEWING
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+  TRIALING
+  INCOMPLETE
+  EXPIRED
+}
+
+enum TemplateScope {
+  GLOBAL
+  WORKSPACE
+  USER
+}
+
+enum QualityMode {
+  DRAFT
+  STANDARD
+  PREMIUM
+}
+
+enum PlatformTarget {
+  FACEBOOK_ADS
+  INSTAGRAM_FEED
+  INSTAGRAM_STORY
+  TIKTOK_ADS
+  WHATSAPP_STATUS
+  BANNER_WEB
+  FLYER_PRINT
+  CUSTOM
+}
+
+enum ConversationMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum CreditSourceType {
+  MONTHLY_ALLOCATION
+  TOPUP
+  BONUS
+  TRIAL
+  MANUAL
+  REFUND
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+  BILLING
+  GENERATION
+}
+
+// ============================================
+// CORE AUTH / ORG
+// ============================================
+
+model User {
+  id              String    @id @default(cuid())
+  clerkId         String    @unique
+  email           String    @unique
+  firstName       String?
+  lastName        String?
+  avatarUrl       String?
+  role            UserRole  @default(USER)
+  onboardingDone  Boolean   @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  preferences       UserPreference?
+  workspaceMembers  WorkspaceMember[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  supportTickets    SupportTicket[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+model UserPreference {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locale         String  @default("fr")
+  theme          String  @default("system")
+  emailDigest    Boolean @default(true)
+  defaultQuality QualityMode @default(STANDARD)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members          WorkspaceMember[]
+  folders          Folder[]
+  projects         Project[]
+  brandKits        BrandKit[]
+  templates        Template[]
+  assets           Asset[]
+  subscription     Subscription?
+  creditWallet     CreditWallet?
+  promptMemories   PromptMemory[]
+  auditLogs        AuditLog[]
+
+  @@index([slug])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ============================================
+// PRODUCT
+// ============================================
+
+model Folder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Folder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children    Folder[]  @relation("FolderTree")
+  name        String
+  color       String?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  projects Project[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId    String?
+  folder      Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name        String
+  status      ProjectStatus @default(DRAFT)
+  brandKitId  String?
+  brandKit    BrandKit?     @relation(fields: [brandKitId], references: [id], onDelete: SetNull)
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  settings       ProjectSettings?
+  conversations  Conversation[]
+  versions       ProjectVersion[]
+  generatedImages GeneratedImage[]
+  assets         Asset[]          @relation("ProjectAssets")
+  exportJobs     ExportJob[]
+  favorites      Favorite[]
+  aiJobs         AiJob[]
+
+  @@index([workspaceId])
+  @@index([folderId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model ProjectSettings {
+  id             String         @id @default(cuid())
+  projectId      String         @unique
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  platform       PlatformTarget @default(FACEBOOK_ADS)
+  aspectRatio    String         @default("1:1")
+  qualityMode    QualityMode    @default(STANDARD)
+  language       String         @default("fr")
+  objective      String?
+  style          String?
+  tone           String?
+  productName    String?
+  productCategory String?
+  targetAudience String?
+  offer          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ConversationMessage[]
+
+  @@index([projectId])
+}
+
+model ConversationMessage {
+  id             String                  @id @default(cuid())
+  conversationId String
+  conversation   Conversation            @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ConversationMessageRole
+  content        String
+  metadata       Json?
+  aiJobId        String?
+  createdAt      DateTime                @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model ProjectVersion {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionNumber  Int
+  label          String?
+  briefSnapshot  Json?
+  settingsSnapshot Json?
+  thumbnailUrl   String?
+  createdAt      DateTime @default(now())
+
+  generatedImages GeneratedImage[]
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+}
+
+model GeneratedImage {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId       String?
+  version         ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  aiJobId         String?
+  aiJob           AiJob?          @relation(fields: [aiJobId], references: [id], onDelete: SetNull)
+  imageUrl        String
+  thumbnailUrl    String?
+  width           Int
+  height          Int
+  format          ExportFormat    @default(PNG)
+  qualityMode     QualityMode
+  prompt          String?
+  negativePrompt  String?
+  provider        String?
+  model           String?
+  costCredits     Int             @default(0)
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  @@index([projectId])
+  @@index([versionId])
+  @@index([aiJobId])
+}
+
+model Asset {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project?  @relation("ProjectAssets", fields: [projectId], references: [id], onDelete: SetNull)
+  type        AssetType
+  name        String
+  url         String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([type])
+}
+
+model ExportJob {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  format      ExportFormat
+  platform    PlatformTarget?
+  width       Int
+  height      Int
+  quality     Int          @default(90)
+  status      JobStatus    @default(PENDING)
+  outputUrl   String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model BrandKit {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name              String
+  brandName         String?
+  slogan            String?
+  logoUrl           String?
+  primaryColors     String[]
+  secondaryColors   String[]
+  forbiddenColors   String[]
+  fonts             String[]
+  tone              String?
+  marketingPromise  String?
+  preferredCTAs     String[]
+  forbiddenWords    String[]
+  referenceUrls     String[]
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  projects Project[]
+
+  @@index([workspaceId])
+}
+
+model Template {
+  id           String        @id @default(cuid())
+  workspaceId  String?
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scope        TemplateScope @default(GLOBAL)
+  name         String
+  description  String?
+  category     String?
+  platform     PlatformTarget?
+  aspectRatio  String?
+  thumbnailUrl String?
+  promptBase   String?
+  settingsJson Json?
+  usageCount   Int           @default(0)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([scope])
+  @@index([category])
+  @@index([platform])
+  @@index([isActive])
+}
+
+model PromptTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String?
+  template    String
+  variables   String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([userId])
+}
+
+model TrashItem {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  entityType   String
+  entityId     String
+  entityName   String
+  metadata     Json?
+  deletedAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([workspaceId])
+  @@index([expiresAt])
+}
+
+// ============================================
+// AI / JOBS
+// ============================================
+
+model AiJob {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  type           String
+  status         JobStatus @default(PENDING)
+  provider       String?
+  model          String?
+  qualityMode    QualityMode @default(STANDARD)
+  prompt         String?
+  briefJson      Json?
+  resultJson     Json?
+  costCredits    Int       @default(0)
+  costUsdEstimate Float?
+  costUsdActual  Float?
+  executionMs    Int?
+  error          String?
+  retryCount     Int       @default(0)
+  idempotencyKey String?   @unique
+  queuedAt       DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  steps          AiJobStep[]
+  providerLogs   AiProviderLog[]
+  generatedImages GeneratedImage[]
+
+  @@index([projectId])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AiJobStep {
+  id          String    @id @default(cuid())
+  jobId       String
+  job         AiJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stepName    String
+  status      JobStatus @default(PENDING)
+  input       Json?
+  output      Json?
+  provider    String?
+  model       String?
+  durationMs  Int?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([jobId])
+}
+
+model AiProviderLog {
+  id          String   @id @default(cuid())
+  jobId       String?
+  job         AiJob?   @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  provider    String
+  model       String
+  endpoint    String?
+  inputTokens Int?
+  outputTokens Int?
+  costUsd     Float?
+  durationMs  Int?
+  statusCode  Int?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([jobId])
+  @@index([provider])
+  @@index([createdAt])
+}
+
+model ModerationFlag {
+  id          String           @id @default(cuid())
+  entityType  String
+  entityId    String
+  reason      String
+  details     String?
+  status      ModerationStatus @default(FLAGGED)
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([entityType, entityId])
+  @@index([status])
+}
+
+model PromptMemory {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prompt      String
+  category    String?
+  score       Float?
+  usageCount  Int       @default(1)
+  lastUsedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([score])
+}
+
+model CreativeBriefSnapshot {
+  id          String   @id @default(cuid())
+  projectId   String
+  briefJson   Json
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model VisualScore {
+  id             String   @id @default(cuid())
+  imageId        String
+  readability    Float?
+  contrast       Float?
+  balance        Float?
+  textDensity    Float?
+  ctaPresence    Float?
+  brandCoherence Float?
+  cleanliness    Float?
+  overallScore   Float?
+  suggestions    Json?
+  createdAt      DateTime @default(now())
+
+  @@index([imageId])
+}
+
+// ============================================
+// BILLING
+// ============================================
+
+model SubscriptionPlan {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  description    String?
+  priceFcfa      Int
+  priceEur       Float
+  credits        Int
+  stripePriceId  String?
+  features       Json?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive])
+  @@index([slug])
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  workspaceId       String             @unique
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  planId            String
+  plan              SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status            SubscriptionStatus @default(ACTIVE)
+  provider          PaymentProvider    @default(STRIPE)
+  providerSubId     String?
+  providerCustomerId String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([status])
+  @@index([providerSubId])
+}
+
+model CreditWallet {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  balance     Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  grants  CreditGrant[]
+  ledger  CreditLedgerEntry[]
+}
+
+model CreditGrant {
+  id          String          @id @default(cuid())
+  walletId    String
+  wallet      CreditWallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        CreditSourceType
+  amount      Int
+  remaining   Int
+  expiresAt   DateTime?
+  sourcePaymentId String?
+  description String?
+  createdAt   DateTime        @default(now())
+
+  @@index([walletId])
+  @@index([type])
+  @@index([expiresAt])
+}
+
+model CreditLedgerEntry {
+  id             String          @id @default(cuid())
+  walletId       String
+  wallet         CreditWallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type           CreditEntryType
+  amount         Int
+  balanceAfter   Int
+  category       String?
+  description    String?
+  jobId          String?
+  paymentId      String?
+  grantId        String?
+  idempotencyKey String?         @unique
+  createdAt      DateTime        @default(now())
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([jobId])
+}
+
+model Payment {
+  id              String         @id @default(cuid())
+  workspaceId     String
+  provider        PaymentProvider
+  providerPayId   String?
+  type            String
+  amountFcfa      Int?
+  amountEur       Float?
+  currency        String         @default("XOF")
+  status          PaymentStatus  @default(PENDING)
+  description     String?
+  metadata        Json?
+  idempotencyKey  String?        @unique
+  paidAt          DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  events PaymentEvent[]
+
+  @@index([workspaceId])
+  @@index([provider])
+  @@index([status])
+  @@index([providerPayId])
+}
+
+model PaymentEvent {
+  id          String   @id @default(cuid())
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  eventType   String
+  providerData Json?
+  createdAt   DateTime @default(now())
+
+  @@index([paymentId])
+}
+
+model InvoiceSnapshot {
+  id          String   @id @default(cuid())
+  workspaceId String
+  paymentId   String?
+  provider    PaymentProvider
+  invoiceUrl  String?
+  data        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+}
+
+model Coupon {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  description    String?
+  discountPercent Int?
+  bonusCredits   Int?
+  maxUses        Int?
+  currentUses    Int      @default(0)
+  expiresAt      DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model CreditPricingRule {
+  id          String      @id @default(cuid())
+  action      String      @unique
+  label       String
+  costCredits Int
+  description String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([action])
+  @@index([isActive])
+}
+
+// ============================================
+// ADMIN / OPS
+// ============================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model AdminFlag {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  flagType    String
+  reason      String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([flagType])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(INFO)
+  title     String
+  body      String?
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  body        String
+  status      String   @default("open")
+  priority    String   @default("normal")
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
