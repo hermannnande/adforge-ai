@@ -55,17 +55,18 @@ interface ProjectItem {
 }
 
 export default function ProjectsPage() {
-  const { getToken, userId, sessionId } = useAuth();
+  const { getToken, userId, sessionId, isLoaded, isSignedIn } = useAuth();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     authFetch('/api/projects', { getToken, userId, sessionId })
       .then((r) => r.json())
       .then((d) => setProjects(d.projects ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [getToken, sessionId, userId]);
+  }, [getToken, isLoaded, isSignedIn, sessionId, userId]);
 
   if (loading) {
     return (
