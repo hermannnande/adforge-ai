@@ -1,0 +1,6 @@
+fix: auto-provision user from Clerk if webhook has not fired yet
+
+When the dashboard loads and the user does not yet exist in the
+database (webhook delay or failure), the app now creates the user,
+workspace, credit wallet, and preferences on-the-fly from the
+Clerk session data.
