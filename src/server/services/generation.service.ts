@@ -1,30 +1,17 @@
 import type { CreativeBrief, CreativeSuggestion } from '@/server/ai/agents';
 import { composePrompt } from '@/server/ai/agents';
-import { aiRegistry } from '@/server/ai/providers';
+import { imageRouter, type ImageProviderName } from '@/server/ai/image';
 import type { QualityMode } from '@prisma/client';
 import { JobStatus, type Prisma } from '@prisma/client';
 
-import { CREDIT_COSTS } from '@/lib/constants/credit-costs';
+import { getProviderCreditCost } from '@/lib/constants/credit-costs';
 import { prisma } from '@/lib/db/prisma';
 
 import { creditService } from './credit.service';
 
-function qualityModeToCreditCost(mode: QualityMode): number {
-  switch (mode) {
-    case 'DRAFT':
-      return CREDIT_COSTS.GENERATION_DRAFT;
-    case 'STANDARD':
-      return CREDIT_COSTS.GENERATION_STANDARD;
-    case 'PREMIUM':
-      return CREDIT_COSTS.GENERATION_PREMIUM;
-    default: {
-      const _exhaustive: never = mode;
-      return _exhaustive;
-    }
-  }
-}
-
-function qualityModeToCompose(mode: QualityMode): 'draft' | 'standard' | 'premium' {
+function qualityModeToCompose(
+  mode: QualityMode,
+): 'draft' | 'standard' | 'premium' {
   switch (mode) {
     case 'DRAFT':
       return 'draft';
@@ -47,6 +34,7 @@ export const generationService = {
     suggestion: CreativeSuggestion;
     qualityMode: QualityMode;
     platform: string;
+    providerOverride?: ImageProviderName;
     brandKit?: {
       primaryColors: string[];
       secondaryColors: string[];
@@ -54,10 +42,36 @@ export const generationService = {
       tone?: string | null;
     };
   }) {
-    const cost = qualityModeToCreditCost(params.qualityMode);
-    const affordable = await creditService.canAfford(params.workspaceId, cost);
+    const quality = qualityModeToCompose(params.qualityMode);
+
+    const composition = composePrompt({
+      brief: params.brief,
+      suggestion: params.suggestion,
+      platform: params.platform,
+      brandKit: params.brandKit,
+      qualityMode: quality,
+    });
+
+    const routeInput = {
+      prompt: composition.prompt,
+      negativePrompt: composition.negativePrompt,
+      size: { width: 1024, height: 1024 } as const,
+      quality,
+      numberOfImages: 1,
+      providerOverride: params.providerOverride,
+    };
+
+    const decision = imageRouter.route(routeInput);
+    const cost = getProviderCreditCost(decision.provider, quality);
+
+    const affordable = await creditService.canAfford(
+      params.workspaceId,
+      cost,
+    );
     if (!affordable) {
-      throw new Error('Crédits insuffisants');
+      throw new Error(
+        `Crédits insuffisants (${cost} requis pour ${decision.provider})`,
+      );
     }
 
     const project = await prisma.project.findFirst({
@@ -71,14 +85,6 @@ export const generationService = {
       throw new Error('Project not found');
     }
 
-    const composition = composePrompt({
-      brief: params.brief,
-      suggestion: params.suggestion,
-      platform: params.platform,
-      brandKit: params.brandKit,
-      qualityMode: qualityModeToCompose(params.qualityMode),
-    });
-
     const job = await prisma.aiJob.create({
       data: {
         projectId: params.projectId,
@@ -89,26 +95,24 @@ export const generationService = {
         prompt: composition.prompt,
         briefJson: params.brief as unknown as Prisma.InputJsonValue,
         costCredits: cost,
+        provider: decision.provider,
       },
     });
 
-    const provider = aiRegistry.getDefaultImageProvider();
-
     try {
-      const result = await provider.generateImage({
-        prompt: composition.prompt,
-        negativePrompt: composition.negativePrompt,
-        size: { width: 1024, height: 1024 },
-        quality: qualityModeToCompose(params.qualityMode),
-        numberOfImages: 1,
-      });
+      const result = await imageRouter.generate(routeInput);
 
       await creditService.burnCredits(params.workspaceId, cost, {
         jobId: job.id,
-        description: 'Génération image',
+        description: `Génération image (${result.decision.provider})`,
       });
 
-      const images: Array<{ id: string; imageUrl: string; width: number; height: number }> = [];
+      const images: Array<{
+        id: string;
+        imageUrl: string;
+        width: number;
+        height: number;
+      }> = [];
 
       for (const img of result.images) {
         const row = await prisma.generatedImage.create({
@@ -121,9 +125,13 @@ export const generationService = {
             qualityMode: params.qualityMode,
             prompt: composition.prompt,
             negativePrompt: composition.negativePrompt,
-            provider: result.provider,
+            provider: result.decision.provider,
             model: result.model,
             costCredits: cost,
+            metadata: {
+              routerDecision: result.decision.reason,
+              usageType: result.decision.usageType,
+            } as unknown as Prisma.InputJsonValue,
           },
         });
         images.push({
@@ -140,7 +148,7 @@ export const generationService = {
           status: JobStatus.COMPLETED,
           completedAt: new Date(),
           executionMs: result.durationMs,
-          provider: result.provider,
+          provider: result.decision.provider,
           model: result.model,
         },
       });
@@ -153,13 +161,18 @@ export const generationService = {
         images,
         prompt: composition.prompt,
         job: updatedJob,
+        provider: result.decision.provider,
+        model: result.model,
+        routerReason: result.decision.reason,
+        estimatedCost: cost,
       };
     } catch (err) {
       await prisma.aiJob.update({
         where: { id: job.id },
         data: {
           status: JobStatus.FAILED,
-          error: err instanceof Error ? err.message : 'Image generation failed',
+          error:
+            err instanceof Error ? err.message : 'Image generation failed',
           completedAt: new Date(),
         },
       });

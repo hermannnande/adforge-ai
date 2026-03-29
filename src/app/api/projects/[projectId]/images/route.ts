@@ -38,6 +38,8 @@ export async function GET(
         width: true,
         height: true,
         prompt: true,
+        provider: true,
+        model: true,
         createdAt: true,
       },
     });
@@ -50,6 +52,8 @@ export async function GET(
           width: img.width,
           height: img.height,
           prompt: img.prompt,
+          provider: img.provider,
+          model: img.model,
           createdAt: img.createdAt.toISOString(),
         })),
       },

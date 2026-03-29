@@ -7,6 +7,15 @@ export interface GeneratedImage {
   url: string;
   width: number;
   height: number;
+  provider?: string;
+  model?: string;
+}
+
+export interface GenerationMeta {
+  provider?: string;
+  model?: string;
+  routerReason?: string;
+  creditsCost?: number;
 }
 
 interface ProjectState {
@@ -16,6 +25,7 @@ interface ProjectState {
   generationError: string | null;
   selectedImageId: string | null;
   imagesLoaded: boolean;
+  lastGenerationMeta: GenerationMeta | null;
 
   setCurrentProject: (id: string | null) => void;
   addGeneratedImages: (images: GeneratedImage[]) => void;
@@ -30,7 +40,11 @@ interface ProjectState {
     brief: unknown,
     suggestion: unknown,
     auth: ChatAuthInfo,
-    options?: { qualityMode?: string; platform?: string },
+    options?: {
+      qualityMode?: string;
+      platform?: string;
+      provider?: string;
+    },
   ) => Promise<void>;
 }
 
@@ -41,10 +55,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   generationError: null,
   selectedImageId: null,
   imagesLoaded: false,
+  lastGenerationMeta: null,
 
   setCurrentProject: (id) => set({ currentProjectId: id }),
   addGeneratedImages: (images) =>
-    set((state) => ({ generatedImages: [...images, ...state.generatedImages] })),
+    set((state) => ({
+      generatedImages: [...images, ...state.generatedImages],
+    })),
   setGenerating: (generating) => set({ isGenerating: generating }),
   setGenerationError: (error) => set({ generationError: error }),
   selectImage: (id) => set({ selectedImageId: id }),
@@ -56,20 +73,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       generationError: null,
       selectedImageId: null,
       imagesLoaded: false,
+      lastGenerationMeta: null,
     }),
 
   loadImages: async (projectId, auth) => {
     if (get().imagesLoaded) return;
     try {
-      const res = await authFetch(`/api/projects/${projectId}/images`, auth);
+      const res = await authFetch(
+        `/api/projects/${projectId}/images`,
+        auth,
+      );
       if (!res.ok) return;
       const data = await res.json();
       const images: GeneratedImage[] = (data.images ?? []).map(
-        (img: { id: string; url: string; width: number; height: number }) => ({
-          id: img.id,
-          url: img.url,
-          width: img.width,
-          height: img.height,
+        (img: Record<string, unknown>) => ({
+          id: img.id as string,
+          url: img.url as string,
+          width: img.width as number,
+          height: img.height as number,
+          provider: img.provider as string | undefined,
+          model: img.model as string | undefined,
         }),
       );
       set({ generatedImages: images, imagesLoaded: true });
@@ -79,23 +102,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   triggerGeneration: async (projectId, brief, suggestion, auth, options) => {
-    const { setGenerating, setGenerationError, addGeneratedImages } = get();
+    const { setGenerating, setGenerationError, addGeneratedImages } =
+      get();
     setGenerating(true);
     setGenerationError(null);
 
     try {
+      const bodyPayload: Record<string, unknown> = {
+        brief,
+        suggestion,
+        qualityMode: options?.qualityMode ?? 'STANDARD',
+        platform: options?.platform ?? 'facebook',
+      };
+      if (options?.provider) {
+        bodyPayload.provider = options.provider;
+      }
+
       const res = await authFetch(
         `/api/projects/${projectId}/generate`,
         auth,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            brief,
-            suggestion,
-            qualityMode: options?.qualityMode ?? 'STANDARD',
-            platform: options?.platform ?? 'facebook',
-          }),
+          body: JSON.stringify(bodyPayload),
         },
       );
 
@@ -106,15 +135,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
 
       const images: GeneratedImage[] = (data.images ?? []).map(
-        (img: { id: string; url: string; width: number; height: number }) => ({
-          id: img.id,
-          url: img.url,
-          width: img.width,
-          height: img.height,
+        (img: Record<string, unknown>) => ({
+          id: img.id as string,
+          url: img.url as string,
+          width: img.width as number,
+          height: img.height as number,
+          provider: data.provider as string | undefined,
+          model: data.model as string | undefined,
         }),
       );
 
       addGeneratedImages(images);
+
+      set({
+        lastGenerationMeta: {
+          provider: data.provider,
+          model: data.model,
+          routerReason: data.routerReason,
+          creditsCost: data.creditsCost,
+        },
+      });
+
       if (images[0]) {
         set({ selectedImageId: images[0].id });
       }

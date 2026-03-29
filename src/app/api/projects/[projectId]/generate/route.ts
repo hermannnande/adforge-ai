@@ -3,6 +3,9 @@ import { getServerAuth } from '@/lib/auth';
 import { userService } from '@/server/services/user.service';
 import { generationService } from '@/server/services/generation.service';
 import type { QualityMode } from '@prisma/client';
+import type { ImageProviderName } from '@/server/ai/image';
+
+const VALID_PROVIDERS = new Set(['openai', 'flux', 'ideogram']);
 
 export async function POST(
   req: NextRequest,
@@ -33,6 +36,10 @@ export async function POST(
 
     const qualityMode: QualityMode = body.qualityMode ?? 'STANDARD';
     const platform: string = body.platform ?? 'facebook';
+    const providerOverride: ImageProviderName | undefined =
+      body.provider && VALID_PROVIDERS.has(body.provider)
+        ? (body.provider as ImageProviderName)
+        : undefined;
 
     const result = await generationService.generateImage({
       projectId,
@@ -41,6 +48,7 @@ export async function POST(
       suggestion,
       qualityMode,
       platform,
+      providerOverride,
       brandKit: undefined,
     });
 
@@ -53,6 +61,10 @@ export async function POST(
       })),
       prompt: result.prompt,
       jobId: result.job.id,
+      provider: result.provider,
+      model: result.model,
+      routerReason: result.routerReason,
+      creditsCost: result.estimatedCost,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Generation failed';

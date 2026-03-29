@@ -25,3 +25,39 @@ export const CREDIT_ACTION_LABELS: Record<CreditAction, string> = {
   BACKGROUND_REMOVAL: 'Suppression arrière-plan',
   UPSCALE: 'Upscale',
 };
+
+export const PROVIDER_CREDIT_COSTS: Record<
+  string,
+  Record<string, number>
+> = {
+  openai: {
+    draft: 1,
+    standard: 2,
+    premium: 4,
+    edit: 1,
+  },
+  flux: {
+    draft: 3,
+    standard: 4,
+    premium: 5,
+    multi_reference: 6,
+    edit: 3,
+  },
+  ideogram: {
+    draft: 2,
+    standard: 3,
+    premium: 3,
+    edit: 2,
+    reframe: 1,
+    background_replace: 2,
+  },
+};
+
+export function getProviderCreditCost(
+  provider: string,
+  quality: string,
+): number {
+  const providerCosts = PROVIDER_CREDIT_COSTS[provider];
+  if (!providerCosts) return CREDIT_COSTS.GENERATION_STANDARD;
+  return providerCosts[quality] ?? providerCosts['standard'] ?? 2;
+}

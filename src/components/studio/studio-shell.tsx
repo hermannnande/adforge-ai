@@ -1,14 +1,28 @@
 'use client';
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { Download, Settings } from 'lucide-react';
+import { Download, Settings, Cpu, Zap, Type, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChatPanel } from './chat-panel';
 import { CanvasPreview } from './canvas-preview';
 import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
 import { useProjectStore } from '@/stores/project.store';
+
+type ProviderChoice = 'auto' | 'openai' | 'flux' | 'ideogram';
+
+const PROVIDER_OPTIONS: {
+  value: ProviderChoice;
+  label: string;
+  icon: typeof Cpu;
+  desc: string;
+}[] = [
+  { value: 'auto', label: 'Auto', icon: Sparkles, desc: 'Le routeur choisit automatiquement' },
+  { value: 'openai', label: 'OpenAI', icon: Cpu, desc: 'Polyvalent — itérations rapides' },
+  { value: 'flux', label: 'FLUX', icon: Zap, desc: 'Photoréaliste premium' },
+  { value: 'ideogram', label: 'Ideogram', icon: Type, desc: 'Texte intégré / posters' },
+];
 
 interface StudioShellProps {
   projectId: string;
@@ -29,11 +43,15 @@ export function StudioShell({
     [getToken, userId, sessionId],
   );
 
+  const [selectedProvider, setSelectedProvider] = useState<ProviderChoice>('auto');
+
   const chatReset = useChatStore((s) => s.reset);
   const brief = useChatStore((s) => s.brief);
   const strategy = useChatStore((s) => s.strategy);
   const shouldGenerate = useChatStore((s) => s.shouldGenerate);
-  const selectedSuggestionIndex = useChatStore((s) => s.selectedSuggestionIndex);
+  const selectedSuggestionIndex = useChatStore(
+    (s) => s.selectedSuggestionIndex,
+  );
   const setShouldGenerate = useChatStore((s) => s.setShouldGenerate);
 
   const projectReset = useProjectStore((s) => s.reset);
@@ -42,6 +60,7 @@ export function StudioShell({
   const triggerGeneration = useProjectStore((s) => s.triggerGeneration);
   const isGenerating = useProjectStore((s) => s.isGenerating);
   const generationError = useProjectStore((s) => s.generationError);
+  const lastMeta = useProjectStore((s) => s.lastGenerationMeta);
 
   useEffect(() => {
     setCurrentProject(projectId);
@@ -50,17 +69,28 @@ export function StudioShell({
       chatReset();
       projectReset();
     };
-  }, [projectId, chatReset, projectReset, setCurrentProject, loadImages, auth]);
+  }, [
+    projectId,
+    chatReset,
+    projectReset,
+    setCurrentProject,
+    loadImages,
+    auth,
+  ]);
 
   useEffect(() => {
     if (!shouldGenerate || isGenerating || !brief || !strategy) return;
 
     const suggestion =
-      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
+      strategy.suggestions[selectedSuggestionIndex] ??
+      strategy.suggestions[0];
     if (!suggestion) return;
 
     setShouldGenerate(false);
-    triggerGeneration(projectId, brief, suggestion, auth, { platform });
+    triggerGeneration(projectId, brief, suggestion, auth, {
+      platform,
+      provider: selectedProvider === 'auto' ? undefined : selectedProvider,
+    });
   }, [
     shouldGenerate,
     isGenerating,
@@ -72,21 +102,39 @@ export function StudioShell({
     projectId,
     auth,
     platform,
+    selectedProvider,
   ]);
 
   const handleGenerate = useCallback(() => {
     if (!brief || !strategy) {
       useChatStore
         .getState()
-        .sendMessage(projectId, 'Génère un visuel avec les paramètres actuels', auth);
+        .sendMessage(
+          projectId,
+          'Génère un visuel avec les paramètres actuels',
+          auth,
+        );
       return;
     }
     const suggestion =
-      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
+      strategy.suggestions[selectedSuggestionIndex] ??
+      strategy.suggestions[0];
     if (suggestion) {
-      triggerGeneration(projectId, brief, suggestion, auth, { platform });
+      triggerGeneration(projectId, brief, suggestion, auth, {
+        platform,
+        provider: selectedProvider === 'auto' ? undefined : selectedProvider,
+      });
     }
-  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform]);
+  }, [
+    projectId,
+    auth,
+    brief,
+    strategy,
+    selectedSuggestionIndex,
+    triggerGeneration,
+    platform,
+    selectedProvider,
+  ]);
 
   return (
     <div className="space-y-4">
@@ -99,7 +147,31 @@ export function StudioShell({
           <Badge>{platform}</Badge>
           <Badge variant="outline">En cours</Badge>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Provider selector */}
+          <div className="flex items-center rounded-lg border border-border/50 bg-muted/30 p-0.5">
+            {PROVIDER_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              const active = selectedProvider === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSelectedProvider(opt.value)}
+                  title={opt.desc}
+                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Icon className="size-3" />
+                  <span className="hidden sm:inline">{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <Button size="sm" variant="outline" className="h-8 text-xs">
             <Download className="mr-1.5 size-3" />
             Exporter
@@ -110,6 +182,30 @@ export function StudioShell({
           </Button>
         </div>
       </div>
+
+      {/* Provider info banner */}
+      {lastMeta?.provider && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/30 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {lastMeta.provider.toUpperCase()}
+          </span>
+          {lastMeta.model && (
+            <span className="text-muted-foreground/70">
+              {lastMeta.model}
+            </span>
+          )}
+          {lastMeta.routerReason && (
+            <span className="text-muted-foreground/50">
+              &mdash; {lastMeta.routerReason}
+            </span>
+          )}
+          {lastMeta.creditsCost != null && (
+            <Badge variant="outline" className="ml-auto text-[10px]">
+              {lastMeta.creditsCost} crédit{lastMeta.creditsCost > 1 ? 's' : ''}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Generation error banner */}
       {generationError && (
