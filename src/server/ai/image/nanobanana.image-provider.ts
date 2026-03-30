@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import type {
   ImageProvider,
   ImageGenerateInput,
@@ -9,11 +9,23 @@ import type {
 } from './types';
 import { PROVIDER_FEATURES } from './types';
 
-function getClient(): GoogleGenerativeAI {
+const IMAGE_MODEL = 'gemini-2.0-flash-preview-image-generation';
+
+function getClient(): GoogleGenAI {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
   if (!key) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured');
-  return new GoogleGenerativeAI(key);
+  return new GoogleGenAI({ apiKey: key });
 }
+
+interface InlineDataPart {
+  inlineData: { mimeType: string; data: string };
+}
+
+interface TextPart {
+  text: string;
+}
+
+type ContentPart = InlineDataPart | TextPart;
 
 export class NanoBananaImageProvider implements ImageProvider {
   readonly name: ImageProviderName = 'nanobanana';
@@ -22,16 +34,12 @@ export class NanoBananaImageProvider implements ImageProvider {
     const started = performance.now();
     const client = getClient();
 
-    const model = client.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
-    });
-
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    const parts: ContentPart[] = [];
 
     if (input.referenceImages && input.referenceImages.length > 0) {
       for (const ref of input.referenceImages) {
         if (ref.startsWith('data:')) {
-          const match = ref.match(/^data:(image\/\w+);base64,(.+)$/);
+          const match = ref.match(/^data:(image\/[\w+]+);base64,(.+)$/);
           if (match) {
             parts.push({
               inlineData: { mimeType: match[1], data: match[2] },
@@ -43,22 +51,17 @@ export class NanoBananaImageProvider implements ImageProvider {
 
     parts.push({ text: input.prompt });
 
-    console.log(`[NanoBanana] Generating with ${parts.length} parts (${parts.length - 1} images)`);
+    console.log(`[NanoBanana] Generating with model=${IMAGE_MODEL}, ${parts.length} parts (${parts.length - 1} ref images)`);
 
-    const result = await model.generateContent({
+    const response = await client.models.generateContent({
+      model: IMAGE_MODEL,
       contents: [{ role: 'user', parts }],
-      generationConfig: {
-        responseModalities: ['image', 'text'],
-      } as Record<string, unknown>,
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
     });
 
-    const response = result.response;
-    const candidates = response.candidates;
-    if (!candidates || candidates.length === 0) {
-      throw new Error('NanoBanana: no candidates in response');
-    }
-
-    const responseParts = candidates[0].content?.parts ?? [];
+    const responseParts = response.candidates?.[0]?.content?.parts ?? [];
 
     let imageBase64: string | null = null;
     let imageMimeType = 'image/png';
@@ -74,10 +77,19 @@ export class NanoBananaImageProvider implements ImageProvider {
     }
 
     if (!imageBase64) {
-      throw new Error('NanoBanana: no image data in response');
+      const textParts = responseParts.filter(
+        (p) => (p as unknown as Record<string, unknown>).text,
+      );
+      const textContent = textParts
+        .map((p) => (p as unknown as { text: string }).text)
+        .join(' ');
+      console.error(`[NanoBanana] No image data. Text response: ${textContent.slice(0, 300)}`);
+      throw new Error(`NanoBanana: no image generated. ${textContent.slice(0, 200)}`);
     }
 
     const dataUrl = `data:${imageMimeType};base64,${imageBase64}`;
+
+    console.log(`[NanoBanana] Image generated in ${Math.round(performance.now() - started)}ms`);
 
     return {
       images: [
@@ -88,7 +100,7 @@ export class NanoBananaImageProvider implements ImageProvider {
           height: input.size.height || 1024,
         },
       ],
-      model: 'gemini-2.0-flash-exp',
+      model: IMAGE_MODEL,
       provider: 'nanobanana',
       durationMs: Math.round(performance.now() - started),
     };
@@ -98,14 +110,10 @@ export class NanoBananaImageProvider implements ImageProvider {
     const started = performance.now();
     const client = getClient();
 
-    const model = client.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
-    });
-
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+    const parts: ContentPart[] = [];
 
     if (input.imageUrl.startsWith('data:')) {
-      const match = input.imageUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+      const match = input.imageUrl.match(/^data:(image\/[\w+]+);base64,(.+)$/);
       if (match) {
         parts.push({
           inlineData: { mimeType: match[1], data: match[2] },
@@ -115,14 +123,15 @@ export class NanoBananaImageProvider implements ImageProvider {
 
     parts.push({ text: `Edit this image: ${input.prompt}` });
 
-    const result = await model.generateContent({
+    const response = await client.models.generateContent({
+      model: IMAGE_MODEL,
       contents: [{ role: 'user', parts }],
-      generationConfig: {
-        responseModalities: ['image', 'text'],
-      } as Record<string, unknown>,
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
     });
 
-    const responseParts = result.response.candidates?.[0]?.content?.parts ?? [];
+    const responseParts = response.candidates?.[0]?.content?.parts ?? [];
     let imageBase64: string | null = null;
     let imageMimeType = 'image/png';
 
@@ -149,7 +158,7 @@ export class NanoBananaImageProvider implements ImageProvider {
           height: input.size?.height ?? 1024,
         },
       ],
-      model: 'gemini-2.0-flash-exp',
+      model: IMAGE_MODEL,
       provider: 'nanobanana',
       durationMs: Math.round(performance.now() - started),
     };

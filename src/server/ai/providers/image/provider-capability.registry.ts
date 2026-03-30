@@ -96,7 +96,7 @@ export const providerCapabilityRegistry = {
 
   listAvailableProviders(): ProviderName[] {
     return Object.values(ProviderName).filter(
-      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX,
+      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX && p !== ProviderName.OPENAI,
     );
   },
 
