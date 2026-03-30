@@ -6,6 +6,7 @@ export { minimalEnrichmentService } from './minimal-enrichment.service';
 export { providerTranslatorService } from './provider-translator.service';
 export { driftGuardService } from './drift-guard.service';
 export { auditLoggerService } from './audit-logger.service';
+export { qualityBoostService } from './quality-boost.service';
 export type {
   AssetRole,
   ClassifiedAsset,
