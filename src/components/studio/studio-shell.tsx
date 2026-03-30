@@ -18,10 +18,10 @@ const PROVIDER_OPTIONS: {
   icon: typeof Cpu;
   desc: string;
 }[] = [
-  { value: 'auto', label: 'Auto', icon: Sparkles, desc: 'Le routeur choisit automatiquement' },
-  { value: 'openai', label: 'OpenAI', icon: Cpu, desc: 'Polyvalent — itérations rapides' },
-  { value: 'flux', label: 'FLUX', icon: Zap, desc: 'Photoréaliste premium' },
-  { value: 'ideogram', label: 'Ideogram', icon: Type, desc: 'Texte intégré / posters' },
+  { value: 'auto', label: 'Auto', icon: Sparkles, desc: 'AdForge choisit le meilleur moteur' },
+  { value: 'openai', label: 'Standard', icon: Cpu, desc: 'Polyvalent — itérations rapides' },
+  { value: 'flux', label: 'Premium', icon: Zap, desc: 'Photoréaliste haute fidélité' },
+  { value: 'ideogram', label: 'Créatif', icon: Type, desc: 'Texte intégré / affiches' },
 ];
 
 interface StudioShellProps {
@@ -187,18 +187,14 @@ export function StudioShell({
       {lastMeta?.provider && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/30 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
-            {lastMeta.provider.toUpperCase()}
+            {lastMeta.provider === 'openai'
+              ? 'Standard'
+              : lastMeta.provider === 'flux'
+                ? 'Premium'
+                : lastMeta.provider === 'ideogram'
+                  ? 'Créatif'
+                  : lastMeta.provider}
           </span>
-          {lastMeta.model && (
-            <span className="text-muted-foreground/70">
-              {lastMeta.model}
-            </span>
-          )}
-          {lastMeta.routerReason && (
-            <span className="text-muted-foreground/50">
-              &mdash; {lastMeta.routerReason}
-            </span>
-          )}
           {lastMeta.creditsCost != null && (
             <Badge variant="outline" className="ml-auto text-[10px]">
               {lastMeta.creditsCost} crédit{lastMeta.creditsCost > 1 ? 's' : ''}

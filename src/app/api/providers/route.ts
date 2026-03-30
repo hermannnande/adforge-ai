@@ -10,11 +10,11 @@ export async function GET() {
     costs: PROVIDER_CREDIT_COSTS[name] ?? {},
     label:
       name === 'openai'
-        ? 'OpenAI — Polyvalent'
+        ? 'Standard — Polyvalent'
         : name === 'flux'
-          ? 'FLUX — Photoréaliste premium'
+          ? 'Premium — Photoréaliste'
           : name === 'ideogram'
-            ? 'Ideogram — Texte intégré / Poster'
+            ? 'Créatif — Texte & Poster'
             : name,
   }));
 

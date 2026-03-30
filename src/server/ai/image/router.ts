@@ -178,21 +178,21 @@ export class ImageGenerationRouter {
     }
   }
 
-  private buildReason(type: ImageUsageType, provider: ImageProviderName): string {
+  private buildReason(type: ImageUsageType, _provider: ImageProviderName): string {
     const reasons: Record<ImageUsageType, string> = {
-      standard_generate: 'Génération standard → OpenAI (polyvalent)',
-      premium_generate: 'Qualité premium → FLUX (photoréaliste)',
-      text_heavy_generate: 'Texte intégré → Ideogram (typographie)',
-      photorealistic_generate: 'Photoréaliste → FLUX (rendu pro)',
-      product_generate: 'Photo produit → FLUX (packshot)',
-      lifestyle_generate: 'Lifestyle → FLUX (mise en scène)',
-      multi_reference_generate: 'Multi-référence → FLUX (cohérence)',
-      simple_edit: 'Édition simple → OpenAI',
-      masked_edit: 'Édition masque → OpenAI',
-      reframe: 'Reframe → Ideogram',
-      background_replace: 'Remplacement fond → Ideogram',
+      standard_generate: 'Moteur standard — polyvalent',
+      premium_generate: 'Moteur premium — photoréaliste',
+      text_heavy_generate: 'Moteur créatif — typographie optimisée',
+      photorealistic_generate: 'Moteur premium — rendu professionnel',
+      product_generate: 'Moteur premium — photo produit',
+      lifestyle_generate: 'Moteur premium — mise en scène',
+      multi_reference_generate: 'Moteur premium — cohérence multi-référence',
+      simple_edit: 'Édition standard',
+      masked_edit: 'Édition avec masque',
+      reframe: 'Recadrage intelligent',
+      background_replace: 'Remplacement d\'arrière-plan',
     };
-    return reasons[type] ?? `Auto → ${provider}`;
+    return reasons[type] ?? 'Sélection automatique';
   }
 }
 

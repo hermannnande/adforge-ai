@@ -35,26 +35,29 @@ export interface ChatResponse {
 }
 
 const UNAVAILABLE_MESSAGE =
-  "Le service IA n'est pas configuré. Ajoutez la variable d'environnement OPENAI_API_KEY sur le serveur (ou dans votre fichier .env local), puis redémarrez l'application.";
+  "Le service de génération est momentanément indisponible. Notre équipe technique a été notifiée. Veuillez réessayer dans quelques minutes.";
 
 function humanizeAIError(raw: string): string {
   if (/429|quota|exceeded|billing/i.test(raw)) {
     return (
-      "Le quota de l'API IA est épuisé. " +
-      'L\'administrateur doit ajouter des crédits sur platform.openai.com pour rétablir le service. ' +
-      'Vos données de projet sont sauvegardées — réessayez dès que le quota est rechargé.'
+      'Notre service de génération a atteint sa limite temporaire d\'utilisation. ' +
+      'Pas d\'inquiétude, vos projets et données sont sauvegardés. ' +
+      'Le service sera rétabli très prochainement — réessayez dans quelques minutes.'
     );
   }
   if (/401|invalid.*key|authentication/i.test(raw)) {
-    return "La clé API IA est invalide ou expirée. Contactez l'administrateur.";
+    return (
+      'Le service de génération rencontre un problème de configuration. ' +
+      'Notre équipe technique en a été informée. Veuillez réessayer ultérieurement.'
+    );
   }
   if (/timeout|timed?\s*out|ECONNRESET/i.test(raw)) {
-    return "Le service IA met trop de temps à répondre. Réessayez dans quelques instants.";
+    return 'La génération prend plus de temps que prévu. Veuillez réessayer dans quelques instants.';
   }
   if (/500|502|503|overloaded|capacity/i.test(raw)) {
-    return "Le service IA est temporairement surchargé. Réessayez dans 1-2 minutes.";
+    return 'Nos serveurs de génération sont temporairement surchargés. Réessayez dans 1 à 2 minutes.';
   }
-  return `Une erreur inattendue s'est produite. Réessayez ou contactez le support si le problème persiste.`;
+  return 'Une erreur inattendue s\'est produite. Réessayez ou contactez le support si le problème persiste.';
 }
 
 export async function processChat(userMessage: string, context: ChatContext): Promise<ChatResponse> {
