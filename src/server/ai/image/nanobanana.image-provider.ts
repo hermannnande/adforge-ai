@@ -14,7 +14,10 @@ const IMAGE_MODEL = 'gemini-2.5-flash-image';
 function getClient(): GoogleGenAI {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
   if (!key) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured');
-  return new GoogleGenAI({ apiKey: key });
+  return new GoogleGenAI({
+    apiKey: key,
+    httpOptions: { apiVersion: 'v1beta' },
+  });
 }
 
 interface InlineDataPart {
@@ -53,13 +56,20 @@ export class NanoBananaImageProvider implements ImageProvider {
 
     console.log(`[NanoBanana] Generating with model=${IMAGE_MODEL}, ${parts.length} parts (${parts.length - 1} ref images)`);
 
-    const response = await client.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: [{ role: 'user', parts }],
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-      },
-    });
+    let response;
+    try {
+      response = await client.models.generateContent({
+        model: IMAGE_MODEL,
+        contents: [{ role: 'user', parts }],
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
+      });
+    } catch (apiError) {
+      const msg = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error(`[NanoBanana] API call failed: ${msg}`);
+      throw new Error(`NanoBanana generation failed: ${msg}`);
+    }
 
     const responseParts = response.candidates?.[0]?.content?.parts ?? [];
 
