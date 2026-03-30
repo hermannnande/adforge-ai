@@ -12,7 +12,8 @@ import { generationQualityEvaluator } from '@/server/services/ai/generation-qual
 import { routingTelemetryService } from '@/server/services/ai/routing-telemetry.service';
 import { consistencyProfileService } from '@/server/services/ai/consistency-profile.service';
 
-import { creditService } from './credit.service';
+// TODO: re-enable when billing is live
+// import { creditService } from './credit.service';
 
 function qualityModeToCompose(
   mode: QualityMode,
@@ -66,12 +67,8 @@ export const generationService = {
       exactTexts: params.exactTexts,
     };
 
-    const estimatedCost = getProviderCreditCost('openai', quality);
-
-    const affordable = await creditService.canAfford(params.workspaceId, estimatedCost);
-    if (!affordable) {
-      throw new Error(`Crédits insuffisants (${estimatedCost} requis)`);
-    }
+    // Credits bypassed during testing phase — all accounts can generate freely
+    // TODO: re-enable when billing is live
 
     const job = await prisma.aiJob.create({
       data: {
@@ -90,10 +87,12 @@ export const generationService = {
 
       const actualCost = getProviderCreditCost(result.provider, quality);
 
-      await creditService.burnCredits(params.workspaceId, actualCost, {
-        jobId: job.id,
-        description: `Génération intelligente (${result.provider})`,
-      });
+      // Credits burn bypassed during testing phase
+      // TODO: re-enable when billing is live
+      // await creditService.burnCredits(params.workspaceId, actualCost, {
+      //   jobId: job.id,
+      //   description: `Génération intelligente (${result.provider})`,
+      // });
 
       const images: Array<{ id: string; imageUrl: string; width: number; height: number }> = [];
 
