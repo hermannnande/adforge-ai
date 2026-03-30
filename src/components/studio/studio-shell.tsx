@@ -52,6 +52,7 @@ export function StudioShell({
   const selectedSuggestionIndex = useChatStore((s) => s.selectedSuggestionIndex);
   const setShouldGenerate = useChatStore((s) => s.setShouldGenerate);
   const lastReferenceImageUrls = useChatStore((s) => s.lastReferenceImageUrls);
+  const lastRawUserPrompt = useChatStore((s) => s.lastRawUserPrompt);
 
   const projectReset = useProjectStore((s) => s.reset);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
@@ -82,11 +83,12 @@ export function StudioShell({
       platform,
       provider: selectedProvider === 'auto' ? undefined : selectedProvider,
       referenceImageUrls: lastReferenceImageUrls.length > 0 ? lastReferenceImageUrls : undefined,
+      rawUserPrompt: lastRawUserPrompt || undefined,
     });
   }, [
     shouldGenerate, isGenerating, brief, strategy, selectedSuggestionIndex,
     setShouldGenerate, triggerGeneration, projectId, auth, platform, selectedProvider,
-    lastReferenceImageUrls,
+    lastReferenceImageUrls, lastRawUserPrompt,
   ]);
 
   const handleGenerate = useCallback(() => {
@@ -105,9 +107,10 @@ export function StudioShell({
         platform,
         provider: selectedProvider === 'auto' ? undefined : selectedProvider,
         referenceImageUrls: lastReferenceImageUrls.length > 0 ? lastReferenceImageUrls : undefined,
+        rawUserPrompt: lastRawUserPrompt || undefined,
       });
     }
-  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform, selectedProvider, lastReferenceImageUrls]);
+  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform, selectedProvider, lastReferenceImageUrls, lastRawUserPrompt]);
 
   const handleSelectForChat = useCallback((img: GeneratedImage) => {
     setChatReferenceImage(img);
@@ -202,6 +205,24 @@ export function StudioShell({
             <Badge variant="outline" className="ml-auto text-[10px]">
               {lastMeta.creditsCost} crédit{lastMeta.creditsCost > 1 ? 's' : ''}
             </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Pipeline status badges */}
+      {(lastReferenceImageUrls.length > 0 || lastRawUserPrompt) && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          {lastRawUserPrompt && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/5 px-2 py-0.5 text-green-700 dark:text-green-400">
+              <span className="size-1.5 rounded-full bg-green-500" />
+              Prompt préservé
+            </span>
+          )}
+          {lastReferenceImageUrls.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/5 px-2 py-0.5 text-blue-700 dark:text-blue-400">
+              <span className="size-1.5 rounded-full bg-blue-500" />
+              {lastReferenceImageUrls.length} image{lastReferenceImageUrls.length > 1 ? 's' : ''} de référence
+            </span>
           )}
         </div>
       )}

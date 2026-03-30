@@ -1,6 +1,11 @@
 import type { NormalizedGenerationBrief, PromptPackage, ProjectContext } from '@/lib/ai/types';
 import { TextRequirementMode } from '@/lib/ai/enums';
 
+/**
+ * NanoBanana prompt compiler.
+ * RULE: brief.rawUserPrompt is the CENTRAL instruction — never replaced.
+ * Context is added before/after as lightweight hints only.
+ */
 export function compileNanoBananaPrompt(
   brief: NormalizedGenerationBrief,
   context: ProjectContext,
@@ -11,8 +16,8 @@ export function compileNanoBananaPrompt(
 
   if (brief.referenceAssetCount > 0) {
     before.push(
-      `Use the ${brief.referenceAssetCount} provided reference image(s) as the exact product to feature in the poster.`,
-      'Keep the product appearance, packaging, colors, shape, and branding exactly as shown in the reference.',
+      `Use the ${brief.referenceAssetCount} provided reference image(s) as the exact product to feature.`,
+      'Preserve the product appearance, packaging, colors, shape, and branding exactly as shown in the reference.',
     );
     notes.push(`${brief.referenceAssetCount} reference image(s) — product identity must be preserved`);
   }

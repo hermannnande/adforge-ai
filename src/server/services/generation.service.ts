@@ -12,13 +12,14 @@ import { generationQualityEvaluator } from '@/server/services/ai/generation-qual
 import { routingTelemetryService } from '@/server/services/ai/routing-telemetry.service';
 import { consistencyProfileService } from '@/server/services/ai/consistency-profile.service';
 import {
-  productMemoryService,
-  conversationMemoryService,
-  canonicalBriefBuilder,
-} from '@/server/services/stateful';
-
-// TODO: re-enable when billing is live
-// import { creditService } from './credit.service';
+  rawPromptService,
+  multiImagePipelineService,
+  projectContextMemoryService,
+  canonicalRequestService,
+  minimalEnrichmentService,
+  driftGuardService,
+  auditLoggerService,
+} from '@/server/services/prompt-grounding';
 
 function qualityModeToCompose(
   mode: QualityMode,
@@ -38,15 +39,11 @@ function qualityModeToCompose(
 }
 
 export const generationService = {
-  /**
-   * Smart generation using the new intelligent routing pipeline.
-   * Analyzes the request, picks the best provider, compiles a tailored prompt,
-   * generates the image, evaluates quality, and logs telemetry.
-   */
   async generateImageSmart(params: {
     projectId: string;
     workspaceId: string;
     prompt: string;
+    rawUserPrompt?: string;
     qualityMode: QualityMode;
     platform?: string;
     aspectRatio?: string;
@@ -59,61 +56,78 @@ export const generationService = {
   }) {
     const quality = qualityModeToCompose(params.qualityMode);
 
-    const [lockedProduct, conversationMemory] = await Promise.all([
-      productMemoryService.buildLockedProductProfile(params.projectId).catch(() => null),
-      conversationMemoryService.summarize(params.projectId).catch(() => null),
-    ]);
+    // ─── 1. RAW PROMPT PRESERVATION ────────────────────────────────────
+    const effectiveRawPrompt = params.rawUserPrompt || params.prompt;
+    const preserved = rawPromptService.preserveCoreIntent(effectiveRawPrompt);
 
-    let brandKitData: { name: string; tone?: string | null; primaryColors: string[]; fonts: string[]; slogan?: string | null } | null = null;
-    if (params.brandKitId) {
-      const bk = await prisma.brandKit.findUnique({ where: { id: params.brandKitId } });
-      if (bk) brandKitData = { name: bk.name, tone: bk.tone, primaryColors: bk.primaryColors, fonts: bk.fonts, slogan: bk.slogan };
+    console.log(`[Generation] Raw prompt preserved: "${preserved.rawUserPrompt.slice(0, 100)}..." (delta=${preserved.isDeltaRequest}, retouch=${preserved.isRetouchRequest})`);
+
+    // ─── 2. MULTI-IMAGE COLLECTION ─────────────────────────────────────
+    const assetCollection = await multiImagePipelineService.buildAssetCollection({
+      projectId: params.projectId,
+      referenceImageUrls: params.referenceImageUrls ?? [],
+      userPrompt: preserved.rawUserPrompt,
+    });
+
+    console.log(`[Generation] Asset collection: ${assetCollection.totalCount} images (primary=${!!assetCollection.primaryProduct})`);
+
+    const imageUsageLog = multiImagePipelineService.buildUsageReasoningLog(assetCollection);
+    for (const entry of imageUsageLog) {
+      console.log(`[Generation] ${entry}`);
     }
 
-    const canonicalBrief = canonicalBriefBuilder.build({
-      latestUserInput: params.prompt,
-      lockedProduct,
-      conversationMemory: conversationMemory ?? {
-        projectGoal: null, approvedProductReference: null, approvedVisualDirection: null,
-        approvedTone: null, approvedAudience: null, approvedPlatform: null, approvedFormat: null,
-        lockedInstructions: [], pendingInstructions: [], fullSummary: '', messageCount: 0, lastUserMessage: params.prompt,
-      },
-      brandKit: brandKitData,
+    // ─── 3. PROJECT CONTEXT MEMORY ─────────────────────────────────────
+    const projectMemory = await projectContextMemoryService.buildProjectMemory(params.projectId).catch(() => ({
+      projectTheme: null,
+      projectGoal: null,
+      preferredOutputType: null,
+      approvedStyleDirection: null,
+      lockedProductReferences: [],
+      lockedBrandHints: [],
+      lockedVisualIntent: null,
+      conversationSummary: '',
+      lastAcceptedDirection: null,
+      activeMarketingGoal: null,
+    }));
+
+    // ─── 4. DRIFT DETECTION ────────────────────────────────────────────
+    const drift = driftGuardService.analyzeDrift({
+      latestPrompt: preserved.rawUserPrompt,
+      projectMemory,
+    });
+
+    if (drift.isDrift) {
+      console.log(`[Generation] Drift detected: ${drift.reason}`);
+    }
+
+    // ─── 5. CANONICAL REQUEST ──────────────────────────────────────────
+    const canonical = canonicalRequestService.buildCanonicalRequest({
+      preserved,
+      assets: assetCollection,
+      memory: projectMemory,
       qualityMode: params.qualityMode,
       platform: params.platform,
       aspectRatio: params.aspectRatio,
     });
 
-    const contextHints: string[] = [];
+    // ─── 6. MINIMAL ENRICHMENT ─────────────────────────────────────────
+    const enriched = minimalEnrichmentService.enrichLightly(canonical);
 
-    if (canonicalBrief.product.hasImportedReference) {
-      contextHints.push('Use the provided reference image(s) as the EXACT product to feature — preserve its appearance faithfully.');
-    }
-    if (canonicalBrief.conversation.projectGoal) {
-      contextHints.push(`Project goal: ${canonicalBrief.conversation.projectGoal}`);
-    }
-    if (canonicalBrief.isOnlyDelta && canonicalBrief.constraints.requestedChanges.length > 0) {
-      contextHints.push(`Changes requested: ${canonicalBrief.constraints.requestedChanges.join(', ')}. Keep everything else the same.`);
-    }
+    console.log(`[Generation] Enriched prompt length: ${enriched.finalPrompt.length} (raw: ${preserved.rawUserPrompt.length})`);
 
-    const enrichedPrompt = contextHints.length > 0
-      ? params.prompt + '\n\n[Context: ' + contextHints.join(' | ') + ']'
-      : params.prompt;
+    // ─── 7. COLLECT ALL IMAGE URLs ─────────────────────────────────────
+    let refUrls = multiImagePipelineService.getAllImageUrls(assetCollection);
 
-    let refUrls = params.referenceImageUrls ?? [];
-    if (refUrls.length === 0 && lockedProduct) {
-      const productDataUrl = await productMemoryService.getProductDataUrl(params.projectId);
-      if (productDataUrl) {
-        refUrls = [productDataUrl];
-        console.log('[Generation] Injecting locked product reference image');
-      }
+    if (refUrls.length === 0 && params.referenceImageUrls && params.referenceImageUrls.length > 0) {
+      refUrls = params.referenceImageUrls;
     }
 
-    console.log(`[Generation] Canonical brief: product=${canonicalBrief.product.hasImportedReference}, delta=${canonicalBrief.isOnlyDelta}, locked=${canonicalBrief.constraints.lockedElements.length}`);
+    console.log(`[Generation] ${refUrls.length} reference image(s) will be sent to provider`);
 
+    // ─── 8. BUILD ROUTING INPUT ────────────────────────────────────────
     const routingInput: SmartRoutingInput = {
-      prompt: enrichedPrompt,
-      originalUserPrompt: params.prompt,
+      prompt: enriched.finalPrompt,
+      originalUserPrompt: preserved.rawUserPrompt,
       projectId: params.projectId,
       workspaceId: params.workspaceId,
       conversationId: params.conversationId,
@@ -127,9 +141,6 @@ export const generationService = {
       exactTexts: params.exactTexts,
     };
 
-    // Credits bypassed during testing phase — all accounts can generate freely
-    // TODO: re-enable when billing is live
-
     const job = await prisma.aiJob.create({
       data: {
         projectId: params.projectId,
@@ -137,7 +148,7 @@ export const generationService = {
         type: 'GENERATE_IMAGE',
         status: JobStatus.RUNNING,
         qualityMode: params.qualityMode,
-        prompt: params.prompt,
+        prompt: preserved.rawUserPrompt,
         startedAt: new Date(),
       },
     });
@@ -145,14 +156,17 @@ export const generationService = {
     try {
       const result = await imageRoutingService.generateWithSmartRouting(routingInput);
 
-      const actualCost = getProviderCreditCost(result.provider, quality);
+      // ─── 9. AUDIT LOG ────────────────────────────────────────────────
+      auditLoggerService.buildLog({
+        canonical,
+        enriched,
+        finalProviderPrompt: result.promptPackage.mainPrompt,
+        providerName: result.provider,
+        driftDetected: drift.isDrift,
+        driftAction: drift.isDrift ? drift.reason : null,
+      });
 
-      // Credits burn bypassed during testing phase
-      // TODO: re-enable when billing is live
-      // await creditService.burnCredits(params.workspaceId, actualCost, {
-      //   jobId: job.id,
-      //   description: `Génération intelligente (${result.provider})`,
-      // });
+      const actualCost = getProviderCreditCost(result.provider, quality);
 
       const images: Array<{ id: string; imageUrl: string; width: number; height: number }> = [];
 
@@ -176,6 +190,9 @@ export const generationService = {
               fallbackUsed: result.fallbackUsed,
               fallbackProvider: result.fallbackProvider ?? null,
               scores: result.decision.scores,
+              rawUserPrompt: preserved.rawUserPrompt,
+              assetsUsed: assetCollection.totalCount,
+              driftDetected: drift.isDrift,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -230,10 +247,11 @@ export const generationService = {
         { provider: result.provider, model: result.model, qualityMode: quality },
       ).catch((err) => console.error('[Consistency] Background update failed:', err));
 
-      prisma.project.update({
-        where: { id: params.projectId },
-        data: { lastCanonicalBrief: JSON.parse(JSON.stringify(canonicalBrief)) },
-      }).catch((err) => console.error('[CanonicalBrief] Background save failed:', err));
+      projectContextMemoryService.updateProjectMemory(
+        params.projectId,
+        preserved.rawUserPrompt,
+        { provider: result.provider, accepted: true },
+      ).catch((err) => console.error('[ProjectMemory] Background update failed:', err));
 
       return {
         images,
@@ -261,10 +279,6 @@ export const generationService = {
     }
   },
 
-  /**
-   * Legacy generation method — kept for backward compatibility.
-   * Uses the old compose + route pipeline.
-   */
   async generateImage(params: {
     projectId: string;
     workspaceId: string;

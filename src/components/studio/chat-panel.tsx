@@ -312,10 +312,6 @@ export function ChatPanel({ projectId, initialPrompt, referenceImage, onClearRef
       filesToUpload.forEach((img) => URL.revokeObjectURL(img.preview));
     }
 
-    if (allImageUrls.length > 0) {
-      message = `${message}\n\n[${allImageUrls.length} image(s) de référence — générez un visuel cohérent avec ces images]`;
-    }
-
     sendMessage(projectId, message, auth, allImageUrls.length > 0 ? allImageUrls : undefined);
     inputRef.current?.focus();
   };

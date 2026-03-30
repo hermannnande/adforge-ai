@@ -1,95 +1,72 @@
 import type { NormalizedGenerationBrief, PromptPackage, ProjectContext } from '@/lib/ai/types';
 import { TextRequirementMode } from '@/lib/ai/enums';
 
-const PHOTO_ENRICHMENT = [
-  'professional studio lighting',
-  'realistic skin texture',
-  'realistic shadows',
-  'depth of field',
-  'premium product photography',
-  'advertising scene',
-  'high detail',
-  'sharp focus',
-];
-
 const QUALITY_MAP: Record<string, string> = {
   DRAFT: 'clean composition, good quality',
   STANDARD: 'professional advertising photography, studio quality, sharp details',
-  PREMIUM: 'ultra-high quality 8K, masterful composition, award-winning photography, cinematic lighting, professional retouching',
+  PREMIUM: 'ultra-high quality 8K, masterful composition, award-winning photography, cinematic lighting',
 };
 
+/**
+ * FLUX prompt compiler.
+ * RULE: brief.rawUserPrompt MUST be included as the core instruction.
+ * FLUX does not support negative prompts — all constraints expressed positively.
+ */
 export function compileFluxPrompt(
   brief: NormalizedGenerationBrief,
   context: ProjectContext,
 ): PromptPackage {
-  const parts: string[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
   const warnings: string[] = [];
   const notes: string[] = [];
 
   warnings.push('FLUX does not support negative prompts — all constraints expressed positively');
 
   if (brief.needPhotorealism) {
-    parts.push('photorealistic advertising photograph');
-    parts.push(...PHOTO_ENRICHMENT);
+    before.push('photorealistic advertising photograph, professional studio lighting, sharp focus, depth of field');
   } else {
-    parts.push('professional advertising visual');
+    before.push('professional advertising visual');
   }
 
-  if (brief.productName) {
-    parts.push(`featuring ${brief.productName} as the central subject`);
-  }
-  if (brief.productCategory) {
-    parts.push(`${brief.productCategory} commercial photography`);
-  }
-
-  if (brief.needProductFocus) {
-    parts.push('product is the focal point, centered composition, clean background');
+  if (brief.referenceAssetCount > 0) {
+    before.push(
+      'maintain the same product, style, colors and identity as the reference image(s)',
+      'keep visual consistency with the provided references',
+    );
+    notes.push(`${brief.referenceAssetCount} reference image(s) — using Kontext for visual coherence`);
   }
 
   if (brief.styleIntent.length > 0) {
-    parts.push(brief.styleIntent.join(' and ') + ' aesthetic');
+    after.push(brief.styleIntent.join(' and ') + ' aesthetic');
   }
 
   if (context.brandKit) {
     if (context.brandKit.primaryColors.length > 0) {
-      parts.push(`color palette: ${context.brandKit.primaryColors.join(', ')}`);
+      after.push(`color palette: ${context.brandKit.primaryColors.join(', ')}`);
     }
     if (context.brandKit.tone) {
-      parts.push(`${context.brandKit.tone} atmosphere`);
+      after.push(`${context.brandKit.tone} atmosphere`);
     }
   }
 
-  if (context.settings.tone) {
-    parts.push(`${context.settings.tone} mood and atmosphere`);
-  }
+  after.push(QUALITY_MAP[brief.qualityMode] ?? QUALITY_MAP.STANDARD);
 
-  parts.push(QUALITY_MAP[brief.qualityMode] ?? QUALITY_MAP.STANDARD);
-
-  if (brief.translatedConstraintsForFlux.length > 0) {
-    parts.push(brief.translatedConstraintsForFlux.slice(0, 5).join(', '));
-  }
-
-  if (brief.positiveConstraints.length > 0) {
-    parts.push(brief.positiveConstraints.join(', '));
-  }
-
-  if (brief.needVisibleText) {
+  if (brief.needVisibleText && brief.providedExactText.length > 0) {
     notes.push('FLUX has limited typography capability — text may not be accurate');
-    if (brief.providedExactText.length > 0) {
-      for (const t of brief.providedExactText) {
-        parts.push(`with text "${t}"`);
-      }
+    for (const t of brief.providedExactText) {
+      after.push(`with text "${t}"`);
     }
   }
 
-  if (brief.referenceAssetCount > 0) {
-    parts.push('maintain the same product, style, colors and identity as the reference image');
-    parts.push('keep visual consistency with the provided reference');
-    notes.push(`${brief.referenceAssetCount} reference image(s) provided — using Kontext for visual coherence`);
-  }
+  const mainPrompt = [
+    ...before,
+    brief.rawUserPrompt,
+    ...after,
+  ].join(', ');
 
   return {
-    mainPrompt: parts.join(', '),
+    mainPrompt,
     negativePrompt: undefined,
     textHandlingMode: brief.needExactText ? TextRequirementMode.EXACT : brief.textRequirementMode,
     generationNotes: notes,

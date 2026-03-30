@@ -49,6 +49,7 @@ interface ProjectState {
       platform?: string;
       provider?: string;
       referenceImageUrls?: string[];
+      rawUserPrompt?: string;
     },
   ) => Promise<void>;
 }
@@ -123,11 +124,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       };
 
       if (hasRefImages) {
-        const sug = suggestion as Record<string, string> | null;
-        bodyPayload.prompt =
-          (sug?.visualConcept ?? sug?.headline ?? '') +
-          ' — basé sur les images de référence fournies';
         bodyPayload.referenceImageUrls = options!.referenceImageUrls;
+      }
+
+      if (options?.rawUserPrompt) {
+        bodyPayload.rawUserPrompt = options.rawUserPrompt;
       }
 
       if (options?.provider) {

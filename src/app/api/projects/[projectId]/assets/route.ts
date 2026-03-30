@@ -68,8 +68,12 @@ export async function POST(
       });
 
       const isFirst = assets.length === 0;
+      const existingPrimary = isFirst
+        ? null
+        : await productMemoryService.getPrimaryProductReference(projectId);
+      const shouldBePrimary = isFirst && !existingPrimary;
 
-      if (isFirst) {
+      if (shouldBePrimary) {
         await productMemoryService.setPrimaryProductReference(projectId, asset.id);
       }
 
@@ -86,7 +90,7 @@ export async function POST(
         name: asset.name,
         width: asset.width,
         height: asset.height,
-        isPrimary: isFirst,
+        isPrimary: shouldBePrimary,
         analysisProfile: profile,
       });
     }

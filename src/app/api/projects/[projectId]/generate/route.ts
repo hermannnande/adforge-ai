@@ -37,6 +37,7 @@ export async function POST(
     const brief = body.brief;
     const suggestion = body.suggestion;
     const directPrompt: string | undefined = body.prompt;
+    const rawUserPrompt: string | undefined = body.rawUserPrompt;
 
     if (directPrompt) {
       const project = await prisma.project.findFirst({
@@ -50,6 +51,7 @@ export async function POST(
         projectId,
         workspaceId: ctx.workspace.id,
         prompt: directPrompt,
+        rawUserPrompt,
         qualityMode,
         platform,
         providerOverride,

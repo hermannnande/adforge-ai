@@ -8,95 +8,88 @@ const QUALITY_MODIFIERS: Record<string, string> = {
 
 const PLATFORM_HINTS: Record<string, string> = {
   facebook: 'Facebook advertisement, clean layout with clear CTA',
-  instagram: 'Instagram post, visually striking, mobile-first, social media aesthetic',
-  instagram_story: 'Instagram Story, vertical, bold text overlay, eye-catching',
-  tiktok: 'TikTok ad, vibrant, dynamic, youth-oriented, vertical',
-  whatsapp: 'WhatsApp Status, simple and clear, mobile viewing',
+  instagram: 'Instagram post, visually striking, mobile-first',
+  instagram_story: 'Instagram Story, vertical, bold text overlay',
+  tiktok: 'TikTok ad, vibrant, dynamic, vertical',
+  whatsapp: 'WhatsApp Status, simple and clear',
   banner: 'web banner, horizontal, professional',
   flyer: 'print flyer, high resolution, professional layout',
 };
 
+/**
+ * OpenAI prompt compiler.
+ * RULE: brief.rawUserPrompt MUST be included as the core instruction.
+ */
 export function compileOpenAIPrompt(
   brief: NormalizedGenerationBrief,
   context: ProjectContext,
 ): PromptPackage {
-  const parts: string[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
   const warnings: string[] = [];
   const notes: string[] = [];
 
   if (brief.needPhotorealism) {
-    parts.push('photorealistic advertising visual');
+    before.push('photorealistic advertising visual');
   } else if (brief.needPosterStyle) {
-    parts.push('professional advertising poster design');
+    before.push('professional advertising poster design');
   } else {
-    parts.push('professional advertising visual');
+    before.push('professional advertising visual');
   }
 
-  if (brief.productName) {
-    parts.push(`featuring ${brief.productName}`);
-  }
-  if (brief.productCategory) {
-    parts.push(`${brief.productCategory} product advertisement`);
+  if (brief.referenceAssetCount > 0) {
+    before.push(
+      `Use the ${brief.referenceAssetCount} provided reference image(s) — preserve the product appearance exactly`,
+    );
+    notes.push(`${brief.referenceAssetCount} reference image(s) attached`);
   }
 
   if (brief.providedExactText.length > 0) {
     for (const t of brief.providedExactText) {
-      parts.push(`text "${t}" clearly visible`);
+      after.push(`text "${t}" clearly visible`);
     }
-    notes.push('Exact text requested — verify text accuracy in output');
-  }
-
-  if (brief.styleIntent.length > 0) {
-    parts.push(`${brief.styleIntent.join(', ')} style`);
+    notes.push('Exact text requested');
   }
 
   if (context.brandKit) {
     if (context.brandKit.primaryColors.length > 0) {
-      parts.push(`using brand colors: ${context.brandKit.primaryColors.join(', ')}`);
+      after.push(`brand colors: ${context.brandKit.primaryColors.join(', ')}`);
     }
     if (context.brandKit.tone) {
-      parts.push(`${context.brandKit.tone} brand tone`);
+      after.push(`${context.brandKit.tone} brand tone`);
     }
-    if (context.brandKit.slogan) {
-      parts.push(`brand slogan "${context.brandKit.slogan}"`);
-    }
-  }
-
-  if (context.settings.tone) {
-    parts.push(`${context.settings.tone} mood`);
   }
 
   const platformKey = brief.platform ?? context.settings.platform ?? '';
   const platformHint = PLATFORM_HINTS[platformKey.toLowerCase().replace(/\s+/g, '_')];
-  if (platformHint) parts.push(platformHint);
+  if (platformHint) after.push(platformHint);
 
-  parts.push(QUALITY_MODIFIERS[brief.qualityMode] ?? QUALITY_MODIFIERS.STANDARD);
-
-  if (brief.positiveConstraints.length > 0) {
-    parts.push(brief.positiveConstraints.join(', '));
-  }
+  after.push(QUALITY_MODIFIERS[brief.qualityMode] ?? QUALITY_MODIFIERS.STANDARD);
 
   const negativePrompt = brief.negativeConstraintsRaw.join(', ');
 
-  let exactTextOverlayPlan = undefined;
-  if (brief.needExactText && brief.providedExactText.length > 0) {
-    exactTextOverlayPlan = {
-      texts: brief.providedExactText.map((t, i) => ({
-        content: t,
-        role: i === 0 ? 'headline' as const : 'other' as const,
-        priority: brief.providedExactText.length - i,
-      })),
-      mode: 'AI_TEXT_OK' as const,
-    };
-  }
+  const mainPrompt = [
+    ...before,
+    brief.rawUserPrompt,
+    ...after,
+  ].join(', ');
 
   return {
-    mainPrompt: parts.join(', '),
+    mainPrompt,
     negativePrompt,
     textHandlingMode: brief.textRequirementMode,
     generationNotes: notes,
     providerWarnings: warnings,
-    exactTextOverlayPlan,
+    exactTextOverlayPlan: brief.needExactText && brief.providedExactText.length > 0
+      ? {
+          texts: brief.providedExactText.map((t, i) => ({
+            content: t,
+            role: i === 0 ? 'headline' as const : 'other' as const,
+            priority: brief.providedExactText.length - i,
+          })),
+          mode: 'AI_TEXT_OK' as const,
+        }
+      : undefined,
     metadata: { compiler: 'openai', taskType: brief.taskType },
   };
 }

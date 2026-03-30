@@ -51,6 +51,7 @@ interface ChatState {
   shouldGenerate: boolean;
   selectedSuggestionIndex: number;
   lastReferenceImageUrls: string[];
+  lastRawUserPrompt: string;
 
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   setLoading: (loading: boolean) => void;
@@ -91,6 +92,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   shouldGenerate: false,
   selectedSuggestionIndex: 0,
   lastReferenceImageUrls: [],
+  lastRawUserPrompt: '',
 
   addMessage: (msg) => {
     const message: ChatMessage = {
@@ -118,6 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       shouldGenerate: false,
       selectedSuggestionIndex: 0,
       lastReferenceImageUrls: [],
+      lastRawUserPrompt: '',
     }),
 
   sendMessage: async (projectId, content, auth, imageUrls) => {
@@ -134,6 +137,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     addMessage({ role: 'user', content, imageUrls });
+    set({ lastRawUserPrompt: content });
     setLoading(true);
     setError(null);
 

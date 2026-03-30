@@ -61,6 +61,7 @@ export class NanoBananaImageProvider implements ImageProvider {
     const parts: ContentPart[] = [];
 
     if (input.referenceImages && input.referenceImages.length > 0) {
+      let attachedCount = 0;
       for (const ref of input.referenceImages) {
         if (ref.startsWith('data:')) {
           const match = ref.match(/^data:(image\/[\w+]+);base64,(.+)$/);
@@ -68,9 +69,28 @@ export class NanoBananaImageProvider implements ImageProvider {
             parts.push({
               inlineData: { mimeType: match[1], data: match[2] },
             });
+            attachedCount++;
+          }
+        } else if (ref.startsWith('http')) {
+          try {
+            const response = await fetch(ref);
+            if (response.ok) {
+              const buffer = await response.arrayBuffer();
+              const contentType = response.headers.get('content-type') || 'image/png';
+              const base64 = Buffer.from(buffer).toString('base64');
+              parts.push({
+                inlineData: { mimeType: contentType, data: base64 },
+              });
+              attachedCount++;
+            } else {
+              console.warn(`[NanoBanana] Failed to fetch reference image: ${ref.slice(0, 80)} (${response.status})`);
+            }
+          } catch (err) {
+            console.warn(`[NanoBanana] Could not fetch reference image: ${ref.slice(0, 80)}`, err);
           }
         }
       }
+      console.log(`[NanoBanana] Attached ${attachedCount}/${input.referenceImages.length} reference images`);
     }
 
     parts.push({ text: input.prompt });
