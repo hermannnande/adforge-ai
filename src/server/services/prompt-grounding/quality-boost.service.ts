@@ -25,38 +25,31 @@ interface QualityBoost {
  * Core quality enhancers that ALWAYS apply — professional advertising standard.
  */
 const CORE_QUALITY = [
-  'ultra high resolution',
-  'sharp focus throughout',
-  'professional advertising photography',
-  'masterful lighting',
-  'clean and polished composition',
-  '8K render quality',
+  'high-end commercial photography',
+  'shot on 85mm lens',
+  'photorealistic',
+  'crisp sharp focus',
+  'natural and balanced lighting',
 ];
 
 /**
  * Human/skin realism — critical for making AI images indistinguishable from real photos.
  */
 const HUMAN_REALISM = [
-  'hyper-realistic human skin with natural pores, subtle imperfections, and micro-texture detail',
-  'natural skin subsurface scattering',
-  'realistic skin tone variations and natural flush',
-  'natural hair strands with individual hair detail',
-  'photorealistic eyes with natural catchlights and iris detail',
-  'natural body proportions',
-  'realistic fabric interaction with the body',
-  'natural depth of field on the person',
+  'authentic skin texture with visible pores',
+  'natural skin look without plastic smoothing',
+  'lifelike eyes and fine hair details',
+  'realistic body proportions',
 ];
 
 /**
  * Product photography realism.
  */
 const PRODUCT_REALISM = [
-  'studio-quality product photography',
-  'precise material rendering — accurate reflection, refraction, and surface texture',
-  'perfect label and packaging detail',
-  'professional product lighting with soft gradients and controlled highlights',
-  'accurate color reproduction',
-  'crisp edge detail on product contours',
+  'sharp product details',
+  'highly legible and clear text on packaging',
+  'accurate material reflections',
+  'perfectly lit product',
 ];
 
 /**
@@ -64,32 +57,28 @@ const PRODUCT_REALISM = [
  */
 const FOOD_REALISM = [
   'appetizing food photography',
-  'realistic food textures and steam',
-  'warm inviting lighting',
-  'shallow depth of field focusing on the dish',
-  'natural food colors and freshness',
+  'natural food colors',
+  'visible steam and fresh textures',
+  'shallow depth of field',
 ];
 
 /**
  * Luxury/premium aesthetics.
  */
 const LUXURY_REALISM = [
-  'luxury editorial photography',
-  'dramatic lighting with deep shadows and highlights',
-  'rich and opulent color palette',
-  'premium surface textures — silk, gold, marble, crystal',
-  'cinematic depth of field',
+  'luxury editorial style',
+  'dramatic but elegant lighting',
+  'rich color palette',
+  'premium material rendering',
 ];
 
 /**
  * Advertising-specific quality markers.
  */
 const AD_QUALITY = [
-  'professional advertising standard',
-  'commercial-grade composition',
-  'print-ready resolution and sharpness',
-  'balanced visual hierarchy',
-  'clean negative space where appropriate',
+  'professional advertising layout',
+  'clean composition',
+  'magazine quality',
 ];
 
 export const qualityBoostService = {
@@ -129,22 +118,12 @@ export const qualityBoostService = {
 
     if (qualityMode === 'PREMIUM') {
       enhancements.push(
+        'shot on medium format camera (Hasselblad)',
         'cinematic color grading',
-        'professional retouching quality',
-        'award-winning photography composition',
-        'medium format camera quality',
-        'phase one IQ4 150MP level of detail',
+        'award-winning photography',
       );
       applied.push('premium-boost');
     }
-
-    enhancements.push(
-      'no visual artifacts',
-      'no AI-looking distortions',
-      'no uncanny valley effect',
-      'natural and believable overall result',
-    );
-    applied.push('anti-ai-artifacts');
 
     const suffix = '\n\nStyle & Quality: ' + enhancements.join(', ') + '.';
 

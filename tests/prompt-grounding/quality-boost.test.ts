@@ -7,9 +7,8 @@ describe('QualityBoostService', () => {
       'crée une affiche pub',
       'STANDARD',
     );
-    expect(boost.suffix).toContain('ultra high resolution');
-    expect(boost.suffix).toContain('sharp focus');
-    expect(boost.suffix).toContain('8K render quality');
+    expect(boost.suffix).toContain('high-end commercial photography');
+    expect(boost.suffix).toContain('crisp sharp focus');
     expect(boost.appliedEnhancements).toContain('core-quality');
   });
 
@@ -19,9 +18,8 @@ describe('QualityBoostService', () => {
       'STANDARD',
     );
     expect(boost.appliedEnhancements).toContain('human-realism');
-    expect(boost.suffix).toContain('hyper-realistic human skin');
-    expect(boost.suffix).toContain('natural pores');
-    expect(boost.suffix).toContain('no uncanny valley');
+    expect(boost.suffix).toContain('authentic skin texture');
+    expect(boost.suffix).toContain('without plastic smoothing');
   });
 
   it('adds product realism for product prompts', () => {
@@ -30,7 +28,7 @@ describe('QualityBoostService', () => {
       'STANDARD',
     );
     expect(boost.appliedEnhancements).toContain('product-realism');
-    expect(boost.suffix).toContain('studio-quality product photography');
+    expect(boost.suffix).toContain('sharp product details');
   });
 
   it('adds luxury enhancers for premium products', () => {
@@ -40,8 +38,8 @@ describe('QualityBoostService', () => {
     );
     expect(boost.appliedEnhancements).toContain('luxury-realism');
     expect(boost.appliedEnhancements).toContain('premium-boost');
-    expect(boost.suffix).toContain('luxury editorial photography');
-    expect(boost.suffix).toContain('phase one IQ4');
+    expect(boost.suffix).toContain('luxury editorial style');
+    expect(boost.suffix).toContain('Hasselblad');
   });
 
   it('adds food realism for restaurant prompts', () => {
@@ -51,16 +49,6 @@ describe('QualityBoostService', () => {
     );
     expect(boost.appliedEnhancements).toContain('food-realism');
     expect(boost.suffix).toContain('appetizing food photography');
-  });
-
-  it('always adds anti-AI-artifact markers', () => {
-    const boost = qualityBoostService.buildQualityBoost(
-      'simple ad visual',
-      'DRAFT',
-    );
-    expect(boost.appliedEnhancements).toContain('anti-ai-artifacts');
-    expect(boost.suffix).toContain('no AI-looking distortions');
-    expect(boost.suffix).toContain('no uncanny valley');
   });
 
   it('enhance() returns user prompt + suffix', () => {
