@@ -22,7 +22,7 @@ export interface RouterDecision {
   provider: ImageProviderName;
   usageType: ImageUsageType;
   reason: string;
-  fallbackProvider?: ImageProviderName;
+  fallbackChain: ImageProviderName[];
   estimatedCost: number;
 }
 
@@ -60,6 +60,12 @@ function usageTypeToProvider(type: ImageUsageType): ImageProviderName {
   }
 }
 
+const FALLBACK_ORDER: Record<ImageProviderName, ImageProviderName[]> = {
+  openai: ['ideogram', 'flux'],
+  flux: ['ideogram', 'openai'],
+  ideogram: ['flux', 'openai'],
+};
+
 export class ImageGenerationRouter {
   private providers: Map<ImageProviderName, ImageProvider>;
 
@@ -80,11 +86,6 @@ export class ImageGenerationRouter {
       .map(([name]) => name);
   }
 
-  /**
-   * Selects the best provider for the given input.
-   * Priority: user override > router detection > default (openai).
-   * Falls back to openai if the selected provider is unavailable.
-   */
   route(input: ImageGenerateInput): RouterDecision {
     const usageType = detectUsageType(input.prompt, input);
 
@@ -93,92 +94,84 @@ export class ImageGenerationRouter {
 
     if (input.providerOverride) {
       providerName = input.providerOverride;
-      reason = `Sélection manuelle: ${providerName}`;
+      reason = `Sélection manuelle`;
     } else {
       providerName = usageTypeToProvider(usageType);
-      reason = this.buildReason(usageType, providerName);
+      reason = this.buildReason(usageType);
     }
 
+    const fallbackChain = (FALLBACK_ORDER[providerName] ?? []).filter(
+      (name) => this.providers.get(name)?.isAvailable(),
+    );
+
     const provider = this.providers.get(providerName);
-    const fallbackName: ImageProviderName = 'openai';
 
     if (!provider?.isAvailable()) {
-      const fallback = this.providers.get(fallbackName);
-      if (fallback?.isAvailable()) {
+      const firstAvailable = fallbackChain[0];
+      if (firstAvailable) {
+        const fb = this.providers.get(firstAvailable)!;
         return {
-          provider: fallbackName,
+          provider: firstAvailable,
           usageType,
-          reason: `${reason} (fallback: ${providerName} indisponible)`,
-          fallbackProvider: providerName,
-          estimatedCost: fallback.estimateCost(input),
+          reason: `${reason} (moteur principal indisponible)`,
+          fallbackChain: fallbackChain.slice(1),
+          estimatedCost: fb.estimateCost(input),
         };
       }
-      throw new Error('Aucun provider image disponible');
+      throw new Error('Aucun moteur de génération d\'image disponible');
     }
 
     return {
       provider: providerName,
       usageType,
       reason,
-      fallbackProvider: providerName !== fallbackName ? fallbackName : undefined,
+      fallbackChain,
       estimatedCost: provider.estimateCost(input),
     };
   }
 
-  async generate(input: ImageGenerateInput): Promise<ImageProviderResult & { decision: RouterDecision }> {
+  async generate(
+    input: ImageGenerateInput,
+  ): Promise<ImageProviderResult & { decision: RouterDecision }> {
     const decision = this.route(input);
 
-    const primary = this.providers.get(decision.provider)!;
+    const tryOrder = [decision.provider, ...decision.fallbackChain];
+    let lastError: unknown = null;
 
-    try {
-      const result = await primary.generateImage({
-        ...input,
-        usageType: decision.usageType,
-      });
-      return { ...result, decision };
-    } catch (error) {
-      console.error(
-        `[ImageRouter] ${decision.provider} failed:`,
-        error instanceof Error ? error.message : error,
-      );
+    for (const name of tryOrder) {
+      const provider = this.providers.get(name);
+      if (!provider?.isAvailable()) continue;
 
-      if (decision.fallbackProvider) {
-        const fallback = this.providers.get(decision.fallbackProvider);
-        if (fallback?.isAvailable()) {
-          console.log(`[ImageRouter] Falling back to ${decision.fallbackProvider}`);
-          const fallbackResult = await fallback.generateImage(input);
-          return {
-            ...fallbackResult,
-            decision: {
-              ...decision,
-              provider: decision.fallbackProvider,
-              reason: `${decision.reason} → fallback ${decision.fallbackProvider}`,
-            },
-          };
-        }
+      try {
+        console.log(`[ImageRouter] Trying ${name}...`);
+        const result = await provider.generateImage({
+          ...input,
+          usageType: decision.usageType,
+        });
+        return {
+          ...result,
+          decision: {
+            ...decision,
+            provider: name,
+            reason:
+              name === decision.provider
+                ? decision.reason
+                : `${decision.reason} → basculé sur moteur alternatif`,
+          },
+        };
+      } catch (error) {
+        lastError = error;
+        console.error(
+          `[ImageRouter] ${name} failed:`,
+          error instanceof Error ? error.message : error,
+        );
       }
-
-      if (decision.provider !== 'openai') {
-        const openai = this.providers.get('openai');
-        if (openai?.isAvailable()) {
-          console.log('[ImageRouter] Final fallback to openai');
-          const openaiResult = await openai.generateImage(input);
-          return {
-            ...openaiResult,
-            decision: {
-              ...decision,
-              provider: 'openai',
-              reason: `${decision.reason} → fallback final openai`,
-            },
-          };
-        }
-      }
-
-      throw error;
     }
+
+    throw lastError ?? new Error('Tous les moteurs de génération ont échoué');
   }
 
-  private buildReason(type: ImageUsageType, _provider: ImageProviderName): string {
+  private buildReason(type: ImageUsageType): string {
     const reasons: Record<ImageUsageType, string> = {
       standard_generate: 'Moteur standard — polyvalent',
       premium_generate: 'Moteur premium — photoréaliste',
