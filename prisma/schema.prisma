@@ -241,18 +241,21 @@ model Folder {
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  workspaceId String
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  folderId    String?
-  folder      Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  name        String
-  status      ProjectStatus @default(DRAFT)
-  brandKitId  String?
-  brandKit    BrandKit?     @relation(fields: [brandKitId], references: [id], onDelete: SetNull)
-  deletedAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId        String?
+  folder          Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name            String
+  status          ProjectStatus @default(DRAFT)
+  brandKitId      String?
+  brandKit        BrandKit?     @relation(fields: [brandKitId], references: [id], onDelete: SetNull)
+  primaryAssetId  String?
+  lastCanonicalBrief Json?
+  conversationSummary String?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   settings       ProjectSettings?
   conversations  Conversation[]
@@ -360,21 +363,23 @@ model GeneratedImage {
 }
 
 model Asset {
-  id          String    @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  projectId   String?
-  project     Project?  @relation("ProjectAssets", fields: [projectId], references: [id], onDelete: SetNull)
-  type        AssetType
-  name        String
-  url         String
-  mimeType    String
-  sizeBytes   Int
-  width       Int?
-  height      Int?
-  metadata    Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId        String?
+  project          Project?  @relation("ProjectAssets", fields: [projectId], references: [id], onDelete: SetNull)
+  type             AssetType
+  name             String
+  url              String
+  mimeType         String
+  sizeBytes        Int
+  width            Int?
+  height           Int?
+  metadata         Json?
+  analysisProfile  Json?
+  isPrimaryProduct Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([workspaceId])
   @@index([projectId])

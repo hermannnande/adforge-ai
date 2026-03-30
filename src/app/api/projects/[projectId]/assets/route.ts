@@ -2,10 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getServerAuth } from '@/lib/auth';
 import { userService } from '@/server/services/user.service';
 import { prisma } from '@/lib/db/prisma';
+import { assetAnalysisService, productMemoryService } from '@/server/services/stateful';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(
@@ -36,15 +37,19 @@ export async function POST(
       return NextResponse.json({ error: 'Maximum 4 images' }, { status: 400 });
     }
 
-    const assets: Array<{ id: string; url: string; name: string; width: number | null; height: number | null }> = [];
+    const assets: Array<{
+      id: string;
+      url: string;
+      name: string;
+      width: number | null;
+      height: number | null;
+      isPrimary: boolean;
+      analysisProfile: unknown;
+    }> = [];
 
     for (const file of files) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        continue;
-      }
+      if (!ALLOWED_TYPES.includes(file.type)) continue;
+      if (file.size > MAX_FILE_SIZE) continue;
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const base64 = buffer.toString('base64');
@@ -62,21 +67,33 @@ export async function POST(
         },
       });
 
+      const isFirst = assets.length === 0;
+
+      if (isFirst) {
+        await productMemoryService.setPrimaryProductReference(projectId, asset.id);
+      }
+
+      let profile = null;
+      try {
+        profile = await assetAnalysisService.analyzeAsset(asset.id);
+      } catch (err) {
+        console.error('[AssetUpload] Analysis failed:', err);
+      }
+
       assets.push({
         id: asset.id,
         url: dataUrl,
         name: asset.name,
         width: asset.width,
         height: asset.height,
+        isPrimary: isFirst,
+        analysisProfile: profile,
       });
     }
 
     return NextResponse.json({ assets });
   } catch (error) {
     console.error('[/api/projects/[id]/assets]', error);
-    return NextResponse.json(
-      { error: 'Upload failed' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
   }
 }

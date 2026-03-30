@@ -11,6 +11,11 @@ import { imageRoutingService, type SmartRoutingInput } from '@/server/services/a
 import { generationQualityEvaluator } from '@/server/services/ai/generation-quality-evaluator.service';
 import { routingTelemetryService } from '@/server/services/ai/routing-telemetry.service';
 import { consistencyProfileService } from '@/server/services/ai/consistency-profile.service';
+import {
+  productMemoryService,
+  conversationMemoryService,
+  canonicalBriefBuilder,
+} from '@/server/services/stateful';
 
 // TODO: re-enable when billing is live
 // import { creditService } from './credit.service';
@@ -54,8 +59,46 @@ export const generationService = {
   }) {
     const quality = qualityModeToCompose(params.qualityMode);
 
+    const [lockedProduct, conversationMemory] = await Promise.all([
+      productMemoryService.buildLockedProductProfile(params.projectId).catch(() => null),
+      conversationMemoryService.summarize(params.projectId).catch(() => null),
+    ]);
+
+    let brandKitData: { name: string; tone?: string | null; primaryColors: string[]; fonts: string[]; slogan?: string | null } | null = null;
+    if (params.brandKitId) {
+      const bk = await prisma.brandKit.findUnique({ where: { id: params.brandKitId } });
+      if (bk) brandKitData = { name: bk.name, tone: bk.tone, primaryColors: bk.primaryColors, fonts: bk.fonts, slogan: bk.slogan };
+    }
+
+    const canonicalBrief = canonicalBriefBuilder.build({
+      latestUserInput: params.prompt,
+      lockedProduct,
+      conversationMemory: conversationMemory ?? {
+        projectGoal: null, approvedProductReference: null, approvedVisualDirection: null,
+        approvedTone: null, approvedAudience: null, approvedPlatform: null, approvedFormat: null,
+        lockedInstructions: [], pendingInstructions: [], fullSummary: '', messageCount: 0, lastUserMessage: params.prompt,
+      },
+      brandKit: brandKitData,
+      qualityMode: params.qualityMode,
+      platform: params.platform,
+      aspectRatio: params.aspectRatio,
+    });
+
+    const enrichedPrompt = canonicalBriefBuilder.toPromptContext(canonicalBrief) + '\n\n' + params.prompt;
+
+    let refUrls = params.referenceImageUrls ?? [];
+    if (refUrls.length === 0 && lockedProduct) {
+      const productDataUrl = await productMemoryService.getProductDataUrl(params.projectId);
+      if (productDataUrl) {
+        refUrls = [productDataUrl];
+        console.log('[Generation] Injecting locked product reference image');
+      }
+    }
+
+    console.log(`[Generation] Canonical brief: product=${canonicalBrief.product.hasImportedReference}, delta=${canonicalBrief.isOnlyDelta}, locked=${canonicalBrief.constraints.lockedElements.length}`);
+
     const routingInput: SmartRoutingInput = {
-      prompt: params.prompt,
+      prompt: enrichedPrompt,
       projectId: params.projectId,
       workspaceId: params.workspaceId,
       conversationId: params.conversationId,
@@ -63,7 +106,7 @@ export const generationService = {
       platform: params.platform,
       aspectRatio: params.aspectRatio,
       referenceImageIds: params.referenceImageIds,
-      referenceImageUrls: params.referenceImageUrls,
+      referenceImageUrls: refUrls,
       brandKitId: params.brandKitId,
       providerOverride: params.providerOverride,
       exactTexts: params.exactTexts,
@@ -171,6 +214,11 @@ export const generationService = {
         params.projectId,
         { provider: result.provider, model: result.model, qualityMode: quality },
       ).catch((err) => console.error('[Consistency] Background update failed:', err));
+
+      prisma.project.update({
+        where: { id: params.projectId },
+        data: { lastCanonicalBrief: JSON.parse(JSON.stringify(canonicalBrief)) },
+      }).catch((err) => console.error('[CanonicalBrief] Background save failed:', err));
 
       return {
         images,

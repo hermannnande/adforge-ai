@@ -7,6 +7,7 @@ export interface TextGenerationParams {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
+  images?: string[];
 }
 
 export interface TextGenerationResult {

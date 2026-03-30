@@ -102,11 +102,24 @@ export class OpenAiProvider implements AiProvider {
     const model = params.model ?? DEFAULT_TEXT_MODEL;
 
     try {
+      type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: string } };
+
+      let userContent: string | ContentPart[];
+      if (params.images && params.images.length > 0) {
+        const parts: ContentPart[] = [{ type: 'text', text: params.userPrompt }];
+        for (const img of params.images) {
+          parts.push({ type: 'image_url', image_url: { url: img, detail: 'low' } });
+        }
+        userContent = parts;
+      } else {
+        userContent = params.userPrompt;
+      }
+
       const completion = await this.client.chat.completions.create({
         model,
         messages: [
           { role: 'system', content: params.systemPrompt },
-          { role: 'user', content: params.userPrompt },
+          { role: 'user', content: userContent as never },
         ],
         temperature: params.temperature,
         max_completion_tokens: params.maxTokens ?? undefined,
