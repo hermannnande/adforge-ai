@@ -16,6 +16,10 @@ export interface GenerationMeta {
   model?: string;
   routerReason?: string;
   creditsCost?: number;
+  taskType?: string;
+  fallbackUsed?: boolean;
+  fallbackProvider?: string;
+  qualityScore?: number;
 }
 
 interface ProjectState {
@@ -153,6 +157,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           model: data.model,
           routerReason: data.routerReason,
           creditsCost: data.creditsCost,
+          taskType: data.taskType,
+          fallbackUsed: data.fallback?.used ?? false,
+          fallbackProvider: data.fallback?.provider,
+          qualityScore: data.quality?.score,
         },
       });
 

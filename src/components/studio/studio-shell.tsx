@@ -160,7 +160,7 @@ export function StudioShell({
         </div>
       </div>
 
-      {/* Provider info banner */}
+      {/* Provider info banner — smart routing feedback */}
       {lastMeta?.provider && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/30 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
@@ -172,6 +172,29 @@ export function StudioShell({
                   ? 'Créatif'
                   : lastMeta.provider}
           </span>
+          {lastMeta.routerReason && (
+            <span className="hidden text-muted-foreground/70 sm:inline" title={lastMeta.routerReason}>
+              — {lastMeta.routerReason.split('|')[0]?.trim()}
+            </span>
+          )}
+          {lastMeta.taskType && (
+            <Badge variant="secondary" className="text-[10px]">
+              {lastMeta.taskType.replace(/_/g, ' ').toLowerCase()}
+            </Badge>
+          )}
+          {lastMeta.fallbackUsed && (
+            <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-600">
+              Fallback
+            </Badge>
+          )}
+          {lastMeta.qualityScore != null && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${lastMeta.qualityScore >= 7 ? 'border-green-500/30 text-green-600' : lastMeta.qualityScore >= 5 ? 'border-yellow-500/30 text-yellow-600' : 'border-red-500/30 text-red-600'}`}
+            >
+              Q: {lastMeta.qualityScore}/10
+            </Badge>
+          )}
           {lastMeta.creditsCost != null && (
             <Badge variant="outline" className="ml-auto text-[10px]">
               {lastMeta.creditsCost} crédit{lastMeta.creditsCost > 1 ? 's' : ''}
