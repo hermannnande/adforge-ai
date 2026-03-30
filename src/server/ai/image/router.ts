@@ -47,10 +47,10 @@ function usageTypeToProvider(type: ImageUsageType): ImageProviderName {
     case 'lifestyle_generate':
     case 'multi_reference_generate':
     case 'premium_generate':
+    case 'standard_generate':
       return 'flux';
     case 'text_heavy_generate':
-      return 'ideogram';
-    case 'standard_generate':
+      return 'flux';
     case 'simple_edit':
     case 'masked_edit':
     case 'reframe':
@@ -61,8 +61,8 @@ function usageTypeToProvider(type: ImageUsageType): ImageProviderName {
 }
 
 const FALLBACK_ORDER: Record<ImageProviderName, ImageProviderName[]> = {
-  openai: ['ideogram', 'flux'],
-  flux: ['ideogram', 'openai'],
+  openai: ['flux'],
+  flux: ['openai'],
   ideogram: ['flux', 'openai'],
 };
 

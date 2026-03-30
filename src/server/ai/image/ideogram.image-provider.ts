@@ -238,12 +238,8 @@ export class IdeogramImageProvider implements ImageProvider {
   }
 
   isAvailable(): boolean {
-    const key = process.env.IDEOGRAM_API_KEY;
-    return (
-      typeof key === 'string' &&
-      key.trim().length > 0 &&
-      process.env.ENABLE_IDEOGRAM !== 'false'
-    );
+    // Ideogram temporarily disabled — writes raw prompt text onto images
+    return false;
   }
 
   getProviderName(): ImageProviderName {

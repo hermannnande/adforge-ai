@@ -80,7 +80,8 @@ export const providerCapabilityRegistry = {
   },
 
   listAvailableProviders(): ProviderName[] {
-    return Object.values(ProviderName);
+    // Ideogram temporarily excluded — produces incoherent results (writes prompt as text on image)
+    return Object.values(ProviderName).filter((p) => p !== ProviderName.IDEOGRAM);
   },
 
   supportsTask(provider: ProviderName, taskType: GenerationTaskType): boolean {

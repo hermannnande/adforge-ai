@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { Download, Settings, Cpu, Zap, Type, Sparkles } from 'lucide-react';
+import { Download, Settings, Cpu, Zap, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChatPanel } from './chat-panel';
@@ -10,7 +10,7 @@ import { CanvasPreview } from './canvas-preview';
 import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
 import { useProjectStore, type GeneratedImage } from '@/stores/project.store';
 
-type ProviderChoice = 'auto' | 'openai' | 'flux' | 'ideogram';
+type ProviderChoice = 'auto' | 'openai' | 'flux';
 
 const PROVIDER_OPTIONS: {
   value: ProviderChoice;
@@ -21,7 +21,6 @@ const PROVIDER_OPTIONS: {
   { value: 'auto', label: 'Auto', icon: Sparkles, desc: 'AdForge choisit le meilleur moteur' },
   { value: 'openai', label: 'Standard', icon: Cpu, desc: 'Polyvalent — itérations rapides' },
   { value: 'flux', label: 'Premium', icon: Zap, desc: 'Photoréaliste haute fidélité' },
-  { value: 'ideogram', label: 'Créatif', icon: Type, desc: 'Texte intégré / affiches' },
 ];
 
 interface StudioShellProps {
