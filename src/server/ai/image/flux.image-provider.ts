@@ -10,101 +10,148 @@ import { PROVIDER_FEATURES } from './types';
 
 const FLUX_MODELS = {
   fast: 'flux-pro-1.1',
-  pro: 'flux-pro-1.1',
+  pro: 'flux-2-pro-preview',
   max: 'flux-pro-1.1-ultra',
 } as const;
 
 type FluxTier = keyof typeof FLUX_MODELS;
 
-function resolveFluxModel(quality: string): { tier: FluxTier; model: string } {
+function resolveFluxModel(quality: string): { tier: FluxTier; model: string; endpoint: string } {
   switch (quality) {
     case 'draft':
-      return { tier: 'fast', model: FLUX_MODELS.fast };
+      return { tier: 'fast', model: FLUX_MODELS.fast, endpoint: '/flux-pro-1.1' };
     case 'premium':
-      return { tier: 'max', model: FLUX_MODELS.max };
+      return { tier: 'max', model: FLUX_MODELS.max, endpoint: '/flux-pro-1.1-ultra' };
     default:
-      return { tier: 'pro', model: FLUX_MODELS.pro };
+      return { tier: 'pro', model: FLUX_MODELS.pro, endpoint: '/flux-2-pro-preview' };
   }
 }
 
 function getConfig() {
   const apiKey = process.env.FLUX_API_KEY ?? '';
-  const baseUrl = process.env.FLUX_BASE_URL ?? 'https://api.bfl.ml/v1';
+  const baseUrl = process.env.FLUX_BASE_URL ?? 'https://api.bfl.ai/v1';
   return { apiKey, baseUrl };
 }
 
-async function fluxFetch(path: string, body?: unknown): Promise<unknown> {
-  const { apiKey, baseUrl } = getConfig();
-  const url = `${baseUrl}${path}`;
-
-  if (!apiKey) {
-    throw new Error('FLUX API key not configured');
-  }
-
+async function rawFetch(
+  url: string,
+  apiKey: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    console.log(`[FLUX] ${body ? 'POST' : 'GET'} ${url}`);
-
-    const res = await fetch(url, {
-      method: body ? 'POST' : 'GET',
+    return await fetch(url, {
+      method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Key': apiKey,
+        'x-key': apiKey,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
     });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`FLUX API error ${res.status}: ${text.slice(0, 300)}`);
-    }
-
-    return res.json();
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`FLUX API timeout on ${path}`);
-    }
-    if (err instanceof TypeError && /fetch failed|network/i.test(err.message)) {
-      throw new Error(`FLUX API network error: cannot reach ${baseUrl} — ${err.message}`);
-    }
-    throw err;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-interface FluxSubmitRaw {
-  id?: string;
-  polling_url?: string;
-}
+async function submitGeneration(endpoint: string, payload: unknown): Promise<{ id: string; pollingUrl: string }> {
+  const { apiKey, baseUrl } = getConfig();
+  if (!apiKey) throw new Error('FLUX API key not configured');
 
-interface FluxPollRaw {
-  id?: string;
-  status?: string;
-  result?: Record<string, unknown>;
-}
+  const url = `${baseUrl}${endpoint}`;
+  console.log(`[FLUX] POST ${url}`);
 
-function extractSubmitId(raw: unknown): string {
-  if (raw && typeof raw === 'object') {
-    const o = raw as FluxSubmitRaw;
-    if (typeof o.id === 'string' && o.id) return o.id;
+  let res: Response;
+  try {
+    res = await rawFetch(url, apiKey, 'POST', payload);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`FLUX: submit timeout on ${endpoint}`);
+    }
+    throw new Error(`FLUX: cannot reach API — ${err instanceof Error ? err.message : String(err)}`);
   }
-  throw new Error('FLUX: no task ID returned');
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`FLUX API ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+
+  const id = typeof data.id === 'string' ? data.id : '';
+  const pollingUrl = typeof data.polling_url === 'string' ? data.polling_url : '';
+
+  if (!id) throw new Error('FLUX: no task ID in response');
+
+  if (!pollingUrl) {
+    const fallback = `${baseUrl}/get_result?id=${encodeURIComponent(id)}`;
+    console.warn(`[FLUX] No polling_url returned, falling back to ${fallback}`);
+    return { id, pollingUrl: fallback };
+  }
+
+  return { id, pollingUrl };
 }
 
-function extractImageUrl(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as FluxPollRaw;
-  const result = o.result;
+const TERMINAL_STATUSES = new Set([
+  'Error', 'error', 'Failed', 'failed',
+  'Request Moderated', 'Content Moderated',
+  'Task not found', 'moderated',
+]);
+
+async function pollUntilReady(
+  pollingUrl: string,
+  taskId: string,
+  maxWaitMs = 100_000,
+  intervalMs = 1_500,
+): Promise<Record<string, unknown>> {
+  const { apiKey } = getConfig();
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    let res: Response;
+    try {
+      res = await rawFetch(pollingUrl, apiKey, 'GET');
+    } catch {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      continue;
+    }
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 404) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        continue;
+      }
+      throw new Error(`FLUX poll error ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as Record<string, unknown>;
+    const status = typeof data.status === 'string' ? data.status : 'Unknown';
+
+    if (status === 'Ready' || status === 'ready' || status === 'completed') {
+      return data;
+    }
+
+    if (TERMINAL_STATUSES.has(status)) {
+      throw new Error(`FLUX job ${taskId}: ${status}`);
+    }
+
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  throw new Error(`FLUX job ${taskId} timed out after ${maxWaitMs}ms`);
+}
+
+function extractImageUrl(data: Record<string, unknown>): string | null {
+  const result = data.result as Record<string, unknown> | undefined;
   if (!result) return null;
 
   if (typeof result.sample === 'string' && result.sample) return result.sample;
   if (typeof result.url === 'string' && result.url) return result.url;
   if (typeof result.image === 'string' && result.image) return result.image;
-  if (typeof result.output === 'string' && result.output) return result.output;
 
   if (Array.isArray(result.images) && result.images.length > 0) {
     const first = result.images[0];
@@ -117,78 +164,27 @@ function extractImageUrl(raw: unknown): string | null {
   return null;
 }
 
-function extractPollStatus(raw: unknown): string {
-  if (raw && typeof raw === 'object') {
-    const s = (raw as FluxPollRaw).status;
-    if (typeof s === 'string') return s;
-  }
-  return 'Unknown';
-}
-
-const TERMINAL_STATUSES = new Set([
-  'Error',
-  'Request Moderated',
-  'Content Moderated',
-  'Task not found',
-  'error',
-  'failed',
-  'moderated',
-]);
-
-async function pollUntilReady(
-  taskId: string,
-  maxWaitMs = 120_000,
-  intervalMs = 2_000,
-): Promise<unknown> {
-  const deadline = Date.now() + maxWaitMs;
-
-  while (Date.now() < deadline) {
-    const res = await fluxFetch(
-      `/get_result?id=${encodeURIComponent(taskId)}`,
-    );
-
-    const status = extractPollStatus(res);
-
-    if (status === 'Ready' || status === 'ready' || status === 'completed') {
-      return res;
-    }
-
-    if (TERMINAL_STATUSES.has(status)) {
-      throw new Error(`FLUX job ${taskId} failed: ${status}`);
-    }
-
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-
-  throw new Error(`FLUX job ${taskId} timed out after ${maxWaitMs}ms`);
-}
-
 export class FluxImageProvider implements ImageProvider {
   readonly name: ImageProviderName = 'flux';
 
   async generateImage(input: ImageGenerateInput): Promise<ImageProviderResult> {
     const started = performance.now();
-    const { tier, model } = resolveFluxModel(input.quality);
-
-    const endpoint =
-      tier === 'max' ? '/flux-pro-1.1-ultra' : '/flux-pro-1.1';
+    const { model, endpoint } = resolveFluxModel(input.quality);
 
     const payload: Record<string, unknown> = {
       prompt: input.prompt,
-      width: input.size.width,
-      height: input.size.height,
+      width: input.size.width || 1024,
+      height: input.size.height || 1024,
     };
 
-    if (tier === 'max') {
-      payload.aspect_ratio = `${input.size.width}:${input.size.height}`;
+    if (endpoint.includes('ultra')) {
+      payload.aspect_ratio = `${input.size.width || 1024}:${input.size.height || 1024}`;
       delete payload.width;
       delete payload.height;
     }
 
-    const submitRaw = await fluxFetch(endpoint, payload);
-    const taskId = extractSubmitId(submitRaw);
-
-    const pollResult = await pollUntilReady(taskId);
+    const { id, pollingUrl } = await submitGeneration(endpoint, payload);
+    const pollResult = await pollUntilReady(pollingUrl, id);
 
     const imageUrl = extractImageUrl(pollResult);
     if (!imageUrl) {
@@ -216,15 +212,13 @@ export class FluxImageProvider implements ImageProvider {
       prompt: input.prompt,
       input_image: input.imageUrl,
     };
-
     if (input.mask) {
       payload.mask = input.mask;
     }
 
-    const submitRaw = await fluxFetch('/flux-pro-1.1/edit', payload);
-    const taskId = extractSubmitId(submitRaw);
+    const { id, pollingUrl } = await submitGeneration('/flux-pro-1.1/edit', payload);
+    const pollResult = await pollUntilReady(pollingUrl, id);
 
-    const pollResult = await pollUntilReady(taskId);
     const imageUrl = extractImageUrl(pollResult);
     if (!imageUrl) {
       throw new Error('FLUX edit: no image URL in result');
