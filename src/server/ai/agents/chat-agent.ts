@@ -134,9 +134,8 @@ export async function processChat(userMessage: string, context: ChatContext): Pr
       const strategy = buildFallbackStrategy(brief);
       return {
         message:
-          'Je lance la génération de votre visuel. ' +
-          'Le mode conversation enrichie est temporairement indisponible, ' +
-          'mais votre image sera créée avec nos moteurs de génération disponibles.',
+          `Parfait, je prépare votre visuel "${brief.productName ?? userMessage}" ! ` +
+          'Voici ma proposition — la génération est en cours.',
         brief,
         strategy,
         shouldGenerate: true,
@@ -145,9 +144,8 @@ export async function processChat(userMessage: string, context: ChatContext): Pr
     }
     return {
       message:
-        'Le service de conversation est momentanément indisponible. ' +
-        'Vous pouvez toujours demander une génération d\'image — tapez par exemple : ' +
-        '"Crée une affiche pour mon produit".',
+        'Je suis prêt à créer vos visuels ! Décrivez ce que vous souhaitez, ' +
+        'par exemple : "Crée une affiche pour mon produit".',
       brief: context.brief ?? emptyBrief(userMessage),
       strategy: context.strategy,
       shouldGenerate: false,
@@ -237,9 +235,8 @@ ${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
       const fallbackStrategy = strategy ?? buildFallbackStrategy(fallbackBrief);
       return {
         message:
-          'Je lance la génération de votre visuel directement. ' +
-          'La conversation intelligente est temporairement limitée, ' +
-          'mais votre image sera créée avec le meilleur moteur disponible.',
+          `C'est noté ! Je lance la création de votre visuel "${fallbackBrief.productName ?? userMessage}". ` +
+          'Voici ma suggestion — génération en cours.',
         brief: fallbackBrief,
         strategy: fallbackStrategy,
         shouldGenerate: true,
