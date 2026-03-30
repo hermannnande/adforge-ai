@@ -44,6 +44,20 @@ const CAPABILITIES: Record<ProviderName, ProviderCapabilityProfile> = {
     temporaryAssetUrl: true,
     maxConcurrent: 8,
   },
+  [ProviderName.NANOBANANA]: {
+    name: ProviderName.NANOBANANA,
+    generalistScore: 9,
+    photorealismScore: 9,
+    typographyScore: 9,
+    posterScore: 8,
+    editScore: 9,
+    multiReferenceScore: 10,
+    async: false,
+    supportsNegativePrompt: false,
+    supportsExactTextReliability: 'high',
+    temporaryAssetUrl: false,
+    maxConcurrent: 10,
+  },
 };
 
 const TASK_SUPPORT: Record<ProviderName, Set<GenerationTaskType>> = {
@@ -72,6 +86,7 @@ const TASK_SUPPORT: Record<ProviderName, Set<GenerationTaskType>> = {
     GenerationTaskType.PHOTOREALISTIC_AD,
     GenerationTaskType.PREMIUM_RENDER,
   ]),
+  [ProviderName.NANOBANANA]: new Set(Object.values(GenerationTaskType)),
 };
 
 export const providerCapabilityRegistry = {
@@ -80,8 +95,9 @@ export const providerCapabilityRegistry = {
   },
 
   listAvailableProviders(): ProviderName[] {
-    // Ideogram temporarily excluded — produces incoherent results (writes prompt as text on image)
-    return Object.values(ProviderName).filter((p) => p !== ProviderName.IDEOGRAM);
+    return Object.values(ProviderName).filter(
+      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX,
+    );
   },
 
   supportsTask(provider: ProviderName, taskType: GenerationTaskType): boolean {

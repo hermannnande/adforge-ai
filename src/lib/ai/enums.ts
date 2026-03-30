@@ -2,6 +2,7 @@ export enum ProviderName {
   OPENAI = 'openai',
   FLUX = 'flux',
   IDEOGRAM = 'ideogram',
+  NANOBANANA = 'nanobanana',
 }
 
 export enum GenerationTaskType {

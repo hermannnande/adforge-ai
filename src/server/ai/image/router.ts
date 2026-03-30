@@ -8,6 +8,7 @@ import type {
 import { OpenAIImageProvider } from './openai.image-provider';
 import { FluxImageProvider } from './flux.image-provider';
 import { IdeogramImageProvider } from './ideogram.image-provider';
+import { NanoBananaImageProvider } from './nanobanana.image-provider';
 
 const PHOTOREALISTIC_PATTERNS =
   /photo\s*r[ée]al|ultra\s*r[ée]al|r[ée]aliste|photo\s*produit|product\s*photo|lifestyle|mise\s*en\s*sc[eè]ne|coh[ée]ren|m[eê]me\s*produit|studio\s*lighting|packshot/i;
@@ -48,22 +49,22 @@ function usageTypeToProvider(type: ImageUsageType): ImageProviderName {
     case 'multi_reference_generate':
     case 'premium_generate':
     case 'standard_generate':
-      return 'flux';
     case 'text_heavy_generate':
-      return 'flux';
+      return 'nanobanana';
     case 'simple_edit':
     case 'masked_edit':
     case 'reframe':
     case 'background_replace':
     default:
-      return 'openai';
+      return 'nanobanana';
   }
 }
 
 const FALLBACK_ORDER: Record<ImageProviderName, ImageProviderName[]> = {
-  openai: ['flux'],
-  flux: ['openai'],
-  ideogram: ['flux', 'openai'],
+  nanobanana: ['openai'],
+  openai: ['nanobanana'],
+  flux: ['nanobanana', 'openai'],
+  ideogram: ['nanobanana', 'openai'],
 };
 
 export class ImageGenerationRouter {
@@ -71,6 +72,7 @@ export class ImageGenerationRouter {
 
   constructor() {
     this.providers = new Map();
+    this.providers.set('nanobanana', new NanoBananaImageProvider());
     this.providers.set('openai', new OpenAIImageProvider());
     this.providers.set('flux', new FluxImageProvider());
     this.providers.set('ideogram', new IdeogramImageProvider());

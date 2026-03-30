@@ -1,4 +1,4 @@
-export type ImageProviderName = 'openai' | 'flux' | 'ideogram';
+export type ImageProviderName = 'openai' | 'flux' | 'ideogram' | 'nanobanana';
 
 export type ImageUsageType =
   | 'standard_generate'
@@ -116,5 +116,14 @@ export const PROVIDER_FEATURES: Record<ImageProviderName, Set<ImageFeature>> = {
     'background_replace',
     'inpainting',
     'negative_prompt',
+  ]),
+  nanobanana: new Set([
+    'photorealistic',
+    'text_in_image',
+    'text_generation',
+    'product_photography',
+    'lifestyle',
+    'style_transfer',
+    'multi_reference',
   ]),
 };

@@ -50,14 +50,22 @@ function buildReasons(
   if (score.capabilityFit >= 10) reasons.push(`Excellent match pour ${brief.taskType}`);
   else if (score.capabilityFit >= 7) reasons.push(`Bon match pour ${brief.taskType}`);
 
+  if (brief.needPhotorealism && provider === ProviderName.NANOBANANA)
+    reasons.push('Moteur photoréaliste Google de haute qualité');
   if (brief.needPhotorealism && provider === ProviderName.FLUX)
-    reasons.push('Meilleur moteur photoréaliste');
+    reasons.push('Moteur photoréaliste');
+  if (brief.needPosterStyle && provider === ProviderName.NANOBANANA)
+    reasons.push('Excellent rendu texte et poster');
   if (brief.needPosterStyle && provider === ProviderName.IDEOGRAM)
     reasons.push('Spécialiste typographie et poster');
+  if (brief.needExactText && provider === ProviderName.NANOBANANA)
+    reasons.push('Très bonne fiabilité texte exact');
   if (brief.needExactText && provider === ProviderName.IDEOGRAM)
-    reasons.push('Meilleure fiabilité texte exact');
+    reasons.push('Fiabilité texte exact');
+  if (brief.referenceAssetCount >= 2 && provider === ProviderName.NANOBANANA)
+    reasons.push('Support multi-référence natif (14 images max)');
   if (brief.referenceAssetCount >= 2 && provider === ProviderName.FLUX)
-    reasons.push('Cohérence multi-référence optimale');
+    reasons.push('Cohérence multi-référence');
 
   if (score.healthScore < 5) reasons.push('Santé dégradée');
   if (score.contextFit >= 7) reasons.push('Historique positif sur ce projet');

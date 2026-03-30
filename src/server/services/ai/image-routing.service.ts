@@ -14,6 +14,7 @@ import { providerHealthService } from '@/server/ai/providers/image/provider-heal
 import { compileOpenAIPrompt } from '@/server/ai/providers/image/prompt-compilers/openai-prompt.compiler';
 import { compileFluxPrompt } from '@/server/ai/providers/image/prompt-compilers/flux-prompt.compiler';
 import { compileIdeogramPrompt } from '@/server/ai/providers/image/prompt-compilers/ideogram-prompt.compiler';
+import { compileNanoBananaPrompt } from '@/server/ai/providers/image/prompt-compilers/nanobanana-prompt.compiler';
 import { imageRouter } from '@/server/ai/image';
 import type { ImageProviderName, ImageGenerateInput } from '@/server/ai/image';
 
@@ -52,6 +53,8 @@ function compileForProvider(
   context: ProjectContext,
 ): PromptPackage {
   switch (provider) {
+    case ProviderName.NANOBANANA:
+      return compileNanoBananaPrompt(brief, context);
     case ProviderName.FLUX:
       return compileFluxPrompt(brief, context);
     case ProviderName.IDEOGRAM:

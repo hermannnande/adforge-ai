@@ -51,6 +51,12 @@ export const PROVIDER_CREDIT_COSTS: Record<
     reframe: 1,
     background_replace: 2,
   },
+  nanobanana: {
+    draft: 1,
+    standard: 1,
+    premium: 2,
+    edit: 1,
+  },
 };
 
 export function getProviderCreditCost(
