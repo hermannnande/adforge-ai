@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
-import { useProjectStore } from '@/stores/project.store';
+import { useProjectStore, type GeneratedImage } from '@/stores/project.store';
 
 const QUICK_PROMPTS = [
   'Crée une affiche pour mon produit',
@@ -33,6 +33,8 @@ const QUICK_PROMPTS = [
 interface ChatPanelProps {
   projectId: string;
   initialPrompt?: string;
+  referenceImage?: GeneratedImage | null;
+  onClearReference?: () => void;
 }
 
 function TypingIndicator() {
@@ -224,7 +226,7 @@ function MessageBubble({
   );
 }
 
-export function ChatPanel({ projectId, initialPrompt }: ChatPanelProps) {
+export function ChatPanel({ projectId, initialPrompt, referenceImage, onClearReference }: ChatPanelProps) {
   const { getToken, userId, sessionId } = useAuth();
   const auth = useMemo<ChatAuthInfo>(
     () => ({ getToken, userId, sessionId }),
@@ -268,15 +270,20 @@ export function ChatPanel({ projectId, initialPrompt }: ChatPanelProps) {
     if (!trimmed || isLoading) return;
 
     const imageUrls = attachedImages.map((img) => img.preview);
+    const hasRef = !!referenceImage;
     setInput('');
     setAttachedImages([]);
 
-    if (imageUrls.length > 0) {
-      const msgWithImages = `${trimmed}\n\n[${imageUrls.length} image(s) de référence jointe(s)]`;
-      sendMessage(projectId, msgWithImages, auth);
-    } else {
-      sendMessage(projectId, trimmed, auth);
+    let message = trimmed;
+    if (hasRef) {
+      message = `[Retouche sur image existante] ${trimmed}`;
+      onClearReference?.();
     }
+    if (imageUrls.length > 0) {
+      message = `${message}\n\n[${imageUrls.length} image(s) de référence jointe(s)]`;
+    }
+
+    sendMessage(projectId, message, auth);
     inputRef.current?.focus();
   };
 
@@ -416,6 +423,27 @@ export function ChatPanel({ projectId, initialPrompt }: ChatPanelProps) {
 
       {/* Input */}
       <div className="shrink-0 border-t p-3">
+        {/* Reference image from canvas */}
+        {referenceImage && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={referenceImage.url}
+              alt="Référence"
+              className="size-10 rounded-md object-cover"
+            />
+            <span className="flex-1 text-xs text-muted-foreground">
+              Image sélectionnée — décrivez les retouches souhaitées
+            </span>
+            <button
+              type="button"
+              onClick={onClearReference}
+              className="rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
         <ImageAttachments images={attachedImages} onRemove={handleRemoveImage} />
         <form
           onSubmit={handleSubmit}

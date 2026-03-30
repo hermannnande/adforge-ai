@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ChatPanel } from './chat-panel';
 import { CanvasPreview } from './canvas-preview';
 import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
-import { useProjectStore } from '@/stores/project.store';
+import { useProjectStore, type GeneratedImage } from '@/stores/project.store';
 
 type ProviderChoice = 'auto' | 'openai' | 'flux' | 'ideogram';
 
@@ -44,14 +44,13 @@ export function StudioShell({
   );
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderChoice>('auto');
+  const [chatReferenceImage, setChatReferenceImage] = useState<GeneratedImage | null>(null);
 
   const chatReset = useChatStore((s) => s.reset);
   const brief = useChatStore((s) => s.brief);
   const strategy = useChatStore((s) => s.strategy);
   const shouldGenerate = useChatStore((s) => s.shouldGenerate);
-  const selectedSuggestionIndex = useChatStore(
-    (s) => s.selectedSuggestionIndex,
-  );
+  const selectedSuggestionIndex = useChatStore((s) => s.selectedSuggestionIndex);
   const setShouldGenerate = useChatStore((s) => s.setShouldGenerate);
 
   const projectReset = useProjectStore((s) => s.reset);
@@ -69,21 +68,13 @@ export function StudioShell({
       chatReset();
       projectReset();
     };
-  }, [
-    projectId,
-    chatReset,
-    projectReset,
-    setCurrentProject,
-    loadImages,
-    auth,
-  ]);
+  }, [projectId, chatReset, projectReset, setCurrentProject, loadImages, auth]);
 
   useEffect(() => {
     if (!shouldGenerate || isGenerating || !brief || !strategy) return;
 
     const suggestion =
-      strategy.suggestions[selectedSuggestionIndex] ??
-      strategy.suggestions[0];
+      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
     if (!suggestion) return;
 
     setShouldGenerate(false);
@@ -92,49 +83,36 @@ export function StudioShell({
       provider: selectedProvider === 'auto' ? undefined : selectedProvider,
     });
   }, [
-    shouldGenerate,
-    isGenerating,
-    brief,
-    strategy,
-    selectedSuggestionIndex,
-    setShouldGenerate,
-    triggerGeneration,
-    projectId,
-    auth,
-    platform,
-    selectedProvider,
+    shouldGenerate, isGenerating, brief, strategy, selectedSuggestionIndex,
+    setShouldGenerate, triggerGeneration, projectId, auth, platform, selectedProvider,
   ]);
 
   const handleGenerate = useCallback(() => {
     if (!brief || !strategy) {
-      useChatStore
-        .getState()
-        .sendMessage(
-          projectId,
-          'Génère un visuel avec les paramètres actuels',
-          auth,
-        );
+      useChatStore.getState().sendMessage(
+        projectId,
+        'Génère un visuel avec les paramètres actuels',
+        auth,
+      );
       return;
     }
     const suggestion =
-      strategy.suggestions[selectedSuggestionIndex] ??
-      strategy.suggestions[0];
+      strategy.suggestions[selectedSuggestionIndex] ?? strategy.suggestions[0];
     if (suggestion) {
       triggerGeneration(projectId, brief, suggestion, auth, {
         platform,
         provider: selectedProvider === 'auto' ? undefined : selectedProvider,
       });
     }
-  }, [
-    projectId,
-    auth,
-    brief,
-    strategy,
-    selectedSuggestionIndex,
-    triggerGeneration,
-    platform,
-    selectedProvider,
-  ]);
+  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform, selectedProvider]);
+
+  const handleSelectForChat = useCallback((img: GeneratedImage) => {
+    setChatReferenceImage(img);
+  }, []);
+
+  const handleClearReference = useCallback(() => {
+    setChatReferenceImage(null);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -148,7 +126,6 @@ export function StudioShell({
           <Badge variant="outline">En cours</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Provider selector */}
           <div className="flex items-center rounded-lg border border-border/50 bg-muted/30 p-0.5">
             {PROVIDER_OPTIONS.map((opt) => {
               const Icon = opt.icon;
@@ -217,11 +194,17 @@ export function StudioShell({
             projectName={projectName}
             onGenerate={handleGenerate}
             onRegenerate={handleGenerate}
+            onSelectForChat={handleSelectForChat}
           />
         </div>
 
         <div className="h-[560px] overflow-hidden rounded-xl border border-border/50 bg-card lg:col-span-2">
-          <ChatPanel projectId={projectId} initialPrompt={initialPrompt} />
+          <ChatPanel
+            projectId={projectId}
+            initialPrompt={initialPrompt}
+            referenceImage={chatReferenceImage}
+            onClearReference={handleClearReference}
+          />
         </div>
       </div>
     </div>

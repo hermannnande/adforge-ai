@@ -68,13 +68,15 @@ function buildFallbackBrief(userMessage: string): CreativeBrief {
   const msg = userMessage.toLowerCase();
 
   const categories: Record<string, string> = {
-    'basket|sneaker|chaussure|shoe': 'mode',
-    'restaurant|food|nourriture|pizza|burger': 'restauration',
-    'beaut[ée]|cosm[ée]ti|maquillage|skin|cream': 'beauté',
-    'immobilier|maison|appartement|house': 'immobilier',
-    'tech|app|logiciel|saas': 'technologie',
+    'basket|sneaker|chaussure|shoe|nike|adidas|jordan': 'mode',
+    'restaurant|food|nourriture|pizza|burger|café|coffee': 'restauration',
+    'beaut[ée]|cosm[ée]ti|maquillage|skin|cream|parfum|soin': 'beauté',
+    'immobilier|maison|appartement|house|villa': 'immobilier',
+    'tech|app|logiciel|saas|mobile': 'technologie',
     'sport|fitness|gym|muscul': 'sport',
     'voiture|auto|car|v[ée]hicule': 'automobile',
+    'v[eê]tement|robe|costume|mode|fashion|tshirt|t-shirt': 'mode',
+    'cr[eè]me|verrue|peau|derma|pharma|médicament|santé': 'santé',
   };
 
   let productCategory: string | null = null;
@@ -85,12 +87,28 @@ function buildFallbackBrief(userMessage: string): CreativeBrief {
     }
   }
 
-  const cleaned = userMessage
-    .replace(GENERATION_KEYWORDS, '')
-    .replace(/une?|des?|du|le|la|les|de|pour|avec|sur/gi, '')
-    .trim();
+  const stopWords =
+    /\b(une?|des?|du|le|la|les|de|pour|avec|sur|dans|mon|ma|mes|un|ce|cette|qui|que|au|aux|en|et|ou|je|tu|il|nous|vous|ils|cre[eé]|genere|fais|fait|lance|montre|image|visuel|affiche|poster|photo|format|portrait|paysage)\b/gi;
 
+  const cleaned = userMessage.replace(stopWords, ' ').replace(/\s+/g, ' ').trim();
   const productName = cleaned.length > 2 ? cleaned : userMessage;
+
+  const formatMatch = msg.match(/format\s*(portrait|paysage|carré|square|story|stories|16.9|9.16|4.3)/i);
+  const style = formatMatch ? formatMatch[1] : null;
+
+  const tonePatterns: Record<string, string> = {
+    'luxe|premium|haut de gamme|élégant': 'premium',
+    'fun|drôle|cool|jeune|dynamique': 'fun et dynamique',
+    'sérieux|corporate|professionnel|business': 'professionnel',
+    'naturel|bio|eco|vert': 'naturel et authentique',
+  };
+  let tone = 'moderne';
+  for (const [pattern, t] of Object.entries(tonePatterns)) {
+    if (new RegExp(pattern, 'i').test(msg)) {
+      tone = t;
+      break;
+    }
+  }
 
   return {
     productName,
@@ -98,8 +116,8 @@ function buildFallbackBrief(userMessage: string): CreativeBrief {
     targetAudience: null,
     objective: 'promotion',
     offer: null,
-    tone: 'moderne',
-    style: null,
+    tone,
+    style,
     platform: null,
     constraints: [],
     rawInput: userMessage,
@@ -108,19 +126,30 @@ function buildFallbackBrief(userMessage: string): CreativeBrief {
 
 function buildFallbackStrategy(brief: CreativeBrief): CreativeStrategy {
   const name = brief.productName ?? 'produit';
+  const cat = brief.productCategory ?? 'produit';
+  const tone = brief.tone ?? 'moderne';
+
   return {
     suggestions: [
       {
         headline: name.charAt(0).toUpperCase() + name.slice(1),
-        subHeadline: 'Découvrez notre sélection exclusive',
+        subHeadline: `Le meilleur choix en ${cat}`,
         cta: 'Découvrir',
-        visualConcept: `Visuel publicitaire professionnel pour ${name}, composition moderne et épurée, éclairage studio`,
-        colorMood: 'Tons modernes et dynamiques',
-        reasoning: 'Visuel direct basé sur la demande utilisateur',
+        visualConcept:
+          `${name}, photographie publicitaire professionnelle, ` +
+          `composition soignée sur fond ${tone === 'premium' ? 'noir élégant avec reflets dorés' : 'épuré et lumineux'}, ` +
+          `éclairage studio, rendu haute qualité, style ${tone}`,
+        colorMood:
+          tone === 'premium'
+            ? 'Noir, or et blanc — ambiance luxe'
+            : tone === 'fun et dynamique'
+              ? 'Couleurs vives et contrastées — ambiance énergique'
+              : 'Tons neutres et modernes — ambiance professionnelle',
+        reasoning: `Visuel ${cat} avec un rendu ${tone}`,
       },
     ],
-    recommendedApproach: 'Génération directe à partir du brief utilisateur.',
-    toneAdvice: 'Ton moderne et professionnel.',
+    recommendedApproach: `Visuel centré sur ${name} avec une approche ${tone}.`,
+    toneAdvice: `Ton ${tone} adapté au secteur ${cat}.`,
   };
 }
 
