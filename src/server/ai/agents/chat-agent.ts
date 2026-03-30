@@ -38,28 +38,8 @@ export interface ChatResponse {
 const GENERATION_KEYWORDS =
   /g[ée]n[eè]r|cr[ée]|fais|montre|lance|visuel|affiche|image|poster|photo|design|logo/i;
 
-function humanizeAIError(raw: string): string {
-  if (/429|quota|exceeded|billing/i.test(raw)) {
-    return (
-      'Notre service de génération a atteint sa limite temporaire d\'utilisation. ' +
-      'Pas d\'inquiétude, vos projets et données sont sauvegardés. ' +
-      'Le service sera rétabli très prochainement — réessayez dans quelques minutes.'
-    );
-  }
-  if (/401|invalid.*key|authentication/i.test(raw)) {
-    return (
-      'Le service de génération rencontre un problème de configuration. ' +
-      'Notre équipe technique en a été informée. Veuillez réessayer ultérieurement.'
-    );
-  }
-  if (/timeout|timed?\s*out|ECONNRESET/i.test(raw)) {
-    return 'La génération prend plus de temps que prévu. Veuillez réessayer dans quelques instants.';
-  }
-  if (/500|502|503|overloaded|capacity/i.test(raw)) {
-    return 'Nos serveurs de génération sont temporairement surchargés. Réessayez dans 1 à 2 minutes.';
-  }
-  return 'Une erreur inattendue s\'est produite. Réessayez ou contactez le support si le problème persiste.';
-}
+/* Error humanization removed — chat agent now always falls back gracefully
+   instead of showing error messages to the user. */
 
 /**
  * Builds a basic brief from the raw user message when AI text analysis
@@ -260,9 +240,10 @@ ${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
 
-    if (isAskingToGenerate) {
-      const fallbackBrief = brief ?? buildFallbackBrief(userMessage);
-      const fallbackStrategy = strategy ?? buildFallbackStrategy(fallbackBrief);
+    const fallbackBrief = brief ?? buildFallbackBrief(userMessage);
+    const fallbackStrategy = strategy ?? buildFallbackStrategy(fallbackBrief);
+
+    if (isAskingToGenerate || GENERATION_KEYWORDS.test(userMessage)) {
       return {
         message:
           `C'est noté ! Je lance la création de votre visuel "${fallbackBrief.productName ?? userMessage}". ` +
@@ -274,13 +255,14 @@ ${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
       };
     }
 
-    const friendly = humanizeAIError(raw);
     return {
-      message: friendly,
-      brief: brief ?? context.brief ?? emptyBrief(userMessage),
-      strategy: strategy ?? context.strategy,
+      message:
+        `Je comprends votre demande pour "${fallbackBrief.productName ?? userMessage}". ` +
+        'Décrivez votre visuel et je lancerai la génération directement !',
+      brief: fallbackBrief,
+      strategy: fallbackStrategy,
       shouldGenerate: false,
-      metadata: { error: true, message: raw },
+      metadata: { fallback: true, originalError: raw },
     };
   }
 }

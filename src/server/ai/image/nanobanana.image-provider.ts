@@ -13,6 +13,9 @@ const MODELS = [
   'gemini-2.5-flash-image',
 ] as const;
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [5000, 15000, 30000];
+
 function getClient(): GoogleGenAI {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
   if (!key) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not configured');
@@ -51,6 +54,15 @@ function extractText(responseParts: unknown[]): string {
     .trim();
 }
 
+function isRateLimitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /429|quota|exceeded|rate.?limit|resource.?exhausted|RESOURCE_EXHAUSTED/i.test(msg);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function toInlinePart(ref: string): Promise<InlineDataPart | null> {
   if (ref.startsWith('data:')) {
     const match = ref.match(/^data:(image\/[\w+]+);base64,(.+)$/);
@@ -74,11 +86,6 @@ async function toInlinePart(ref: string): Promise<InlineDataPart | null> {
   return null;
 }
 
-/**
- * Build multi-image reference instruction that tells Gemini HOW to use the images.
- * Placed BEFORE the user prompt so the AI understands the context of the images
- * it just "saw" in the inline data parts.
- */
 function buildMultiImageInstruction(imageCount: number): string {
   if (imageCount === 0) return '';
 
@@ -139,58 +146,73 @@ export class NanoBananaImageProvider implements ImageProvider {
     let lastError: Error | null = null;
 
     for (const modelId of MODELS) {
-      console.log(`[NanoBanana] Trying model=${modelId}, ${parts.length} parts (${attachedCount} ref images)`);
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const delay = RETRY_DELAYS[attempt - 1] ?? 30000;
+          console.log(`[NanoBanana] Rate limit hit — retry ${attempt}/${MAX_RETRIES} after ${delay / 1000}s...`);
+          await sleep(delay);
+        }
 
-      try {
-        const response = await client.models.generateContent({
-          model: modelId,
-          contents: [{ role: 'user', parts }],
-          config: {
-            responseModalities: ['TEXT', 'IMAGE'],
-          },
-        });
+        console.log(`[NanoBanana] Trying model=${modelId}, attempt=${attempt + 1}, ${parts.length} parts (${attachedCount} ref images)`);
 
-        const responseParts = response.candidates?.[0]?.content?.parts ?? [];
-        const image = extractImage(responseParts);
-
-        if (image) {
-          const dataUrl = `data:${image.mimeType};base64,${image.base64}`;
-          console.log(`[NanoBanana] Image generated with ${modelId} in ${Math.round(performance.now() - started)}ms`);
-
-          return {
-            images: [
-              {
-                url: dataUrl,
-                base64: image.base64,
-                width: input.size.width || 1024,
-                height: input.size.height || 1024,
-              },
-            ],
+        try {
+          const response = await client.models.generateContent({
             model: modelId,
-            provider: 'nanobanana',
-            durationMs: Math.round(performance.now() - started),
-          };
+            contents: [{ role: 'user', parts }],
+            config: {
+              responseModalities: ['TEXT', 'IMAGE'],
+            },
+          });
+
+          const responseParts = response.candidates?.[0]?.content?.parts ?? [];
+          const image = extractImage(responseParts);
+
+          if (image) {
+            const dataUrl = `data:${image.mimeType};base64,${image.base64}`;
+            console.log(`[NanoBanana] Image generated with ${modelId} in ${Math.round(performance.now() - started)}ms (attempt ${attempt + 1})`);
+
+            return {
+              images: [
+                {
+                  url: dataUrl,
+                  base64: image.base64,
+                  width: input.size.width || 1024,
+                  height: input.size.height || 1024,
+                },
+              ],
+              model: modelId,
+              provider: 'nanobanana',
+              durationMs: Math.round(performance.now() - started),
+            };
+          }
+
+          const textContent = extractText(responseParts);
+          if (/sorry|cannot|can't|unable|refuse|inappropriate|safety/i.test(textContent)) {
+            console.warn(`[NanoBanana] Safety filter with ${modelId}: ${textContent.slice(0, 200)}`);
+            throw new Error(
+              'Le contenu de votre demande a été filtré par le système de sécurité. Essayez de reformuler votre requête.',
+            );
+          }
+
+          console.warn(`[NanoBanana] No image from ${modelId}. Text: ${textContent.slice(0, 200)}`);
+          lastError = new Error(`No image from ${modelId}`);
+          break;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+
+          if (/safety|filtré|reformuler/i.test(msg)) {
+            throw err;
+          }
+
+          if (isRateLimitError(err) && attempt < MAX_RETRIES) {
+            lastError = err instanceof Error ? err : new Error(msg);
+            continue;
+          }
+
+          console.error(`[NanoBanana] Model ${modelId} failed: ${msg.slice(0, 300)}`);
+          lastError = err instanceof Error ? err : new Error(msg);
+          break;
         }
-
-        const textContent = extractText(responseParts);
-        if (/sorry|cannot|can't|unable|refuse|inappropriate|safety/i.test(textContent)) {
-          console.warn(`[NanoBanana] Safety filter with ${modelId}: ${textContent.slice(0, 200)}`);
-          throw new Error(
-            'Le contenu de votre demande a été filtré par le système de sécurité. Essayez de reformuler votre requête.',
-          );
-        }
-
-        console.warn(`[NanoBanana] No image from ${modelId}. Text: ${textContent.slice(0, 200)}`);
-        lastError = new Error(`No image from ${modelId}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-
-        if (/safety|filtré|reformuler/i.test(msg)) {
-          throw err;
-        }
-
-        console.error(`[NanoBanana] Model ${modelId} failed: ${msg.slice(0, 300)}`);
-        lastError = err instanceof Error ? err : new Error(msg);
       }
     }
 
