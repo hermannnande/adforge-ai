@@ -95,6 +95,9 @@ export class NanoBananaImageProvider implements ImageProvider {
 
     parts.push({ text: input.prompt });
 
+    console.log(`[NanoBanana] FINAL prompt sent to API: "${input.prompt.slice(0, 200)}"`);
+    console.log(`[NanoBanana] FINAL parts count: ${parts.length} (${parts.length - 1} images + 1 text)`);
+
     let lastError: Error | null = null;
 
     for (const modelId of MODELS) {

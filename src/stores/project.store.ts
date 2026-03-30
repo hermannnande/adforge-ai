@@ -123,12 +123,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         platform: options?.platform ?? 'facebook',
       };
 
-      if (hasRefImages) {
-        bodyPayload.referenceImageUrls = options!.referenceImageUrls;
+      if (options?.rawUserPrompt) {
+        bodyPayload.prompt = options.rawUserPrompt;
+        bodyPayload.rawUserPrompt = options.rawUserPrompt;
       }
 
-      if (options?.rawUserPrompt) {
-        bodyPayload.rawUserPrompt = options.rawUserPrompt;
+      if (hasRefImages) {
+        bodyPayload.referenceImageUrls = options!.referenceImageUrls;
+        if (!bodyPayload.prompt) {
+          const sug = suggestion as Record<string, string> | null;
+          bodyPayload.prompt = sug?.visualConcept ?? sug?.headline ?? '';
+        }
       }
 
       if (options?.provider) {

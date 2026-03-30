@@ -116,17 +116,19 @@ export const generationService = {
     console.log(`[Generation] Enriched prompt length: ${enriched.finalPrompt.length} (raw: ${preserved.rawUserPrompt.length})`);
 
     // ─── 7. COLLECT ALL IMAGE URLs ─────────────────────────────────────
-    let refUrls = multiImagePipelineService.getAllImageUrls(assetCollection);
+    // Priority: use the original referenceImageUrls from the request first (direct from frontend)
+    // Fall back to asset collection URLs (which may include stored project assets)
+    let refUrls = (params.referenceImageUrls && params.referenceImageUrls.length > 0)
+      ? params.referenceImageUrls
+      : multiImagePipelineService.getAllImageUrls(assetCollection);
 
-    if (refUrls.length === 0 && params.referenceImageUrls && params.referenceImageUrls.length > 0) {
-      refUrls = params.referenceImageUrls;
-    }
-
-    console.log(`[Generation] ${refUrls.length} reference image(s) will be sent to provider`);
+    console.log(`[Generation] ${refUrls.length} reference image(s) will be sent to provider (source: ${params.referenceImageUrls?.length ? 'direct' : 'collection'})`);
 
     // ─── 8. BUILD ROUTING INPUT ────────────────────────────────────────
+    // For NanoBanana: send raw prompt directly (no enrichment)
+    // For other providers: use the enriched prompt
     const routingInput: SmartRoutingInput = {
-      prompt: enriched.finalPrompt,
+      prompt: preserved.rawUserPrompt,
       originalUserPrompt: preserved.rawUserPrompt,
       projectId: params.projectId,
       workspaceId: params.workspaceId,
