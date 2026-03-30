@@ -53,36 +53,85 @@ async function fluxFetch(path: string, body?: unknown): Promise<unknown> {
   return res.json();
 }
 
-interface FluxSubmitResponse {
-  id: string;
+interface FluxSubmitRaw {
+  id?: string;
   polling_url?: string;
 }
 
-interface FluxPollResponse {
-  id: string;
-  status: 'Pending' | 'Ready' | 'Error' | 'Request Moderated' | 'Content Moderated' | 'Task not found';
-  result?: {
-    sample?: string;
-    prompt?: string;
-    seed?: number;
-  };
+interface FluxPollRaw {
+  id?: string;
+  status?: string;
+  result?: Record<string, unknown>;
 }
+
+function extractSubmitId(raw: unknown): string {
+  if (raw && typeof raw === 'object') {
+    const o = raw as FluxSubmitRaw;
+    if (typeof o.id === 'string' && o.id) return o.id;
+  }
+  throw new Error('FLUX: no task ID returned');
+}
+
+function extractImageUrl(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as FluxPollRaw;
+  const result = o.result;
+  if (!result) return null;
+
+  if (typeof result.sample === 'string' && result.sample) return result.sample;
+  if (typeof result.url === 'string' && result.url) return result.url;
+  if (typeof result.image === 'string' && result.image) return result.image;
+  if (typeof result.output === 'string' && result.output) return result.output;
+
+  if (Array.isArray(result.images) && result.images.length > 0) {
+    const first = result.images[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first === 'object' && typeof (first as Record<string, unknown>).url === 'string') {
+      return (first as Record<string, unknown>).url as string;
+    }
+  }
+
+  return null;
+}
+
+function extractPollStatus(raw: unknown): string {
+  if (raw && typeof raw === 'object') {
+    const s = (raw as FluxPollRaw).status;
+    if (typeof s === 'string') return s;
+  }
+  return 'Unknown';
+}
+
+const TERMINAL_STATUSES = new Set([
+  'Error',
+  'Request Moderated',
+  'Content Moderated',
+  'Task not found',
+  'error',
+  'failed',
+  'moderated',
+]);
 
 async function pollUntilReady(
   taskId: string,
   maxWaitMs = 120_000,
   intervalMs = 2_000,
-): Promise<FluxPollResponse> {
+): Promise<unknown> {
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    const res = (await fluxFetch(
+    const res = await fluxFetch(
       `/get_result?id=${encodeURIComponent(taskId)}`,
-    )) as FluxPollResponse;
+    );
 
-    if (res.status === 'Ready') return res;
-    if (res.status === 'Error' || res.status === 'Request Moderated' || res.status === 'Content Moderated' || res.status === 'Task not found') {
-      throw new Error(`FLUX job ${taskId} failed: ${res.status}`);
+    const status = extractPollStatus(res);
+
+    if (status === 'Ready' || status === 'ready' || status === 'completed') {
+      return res;
+    }
+
+    if (TERMINAL_STATUSES.has(status)) {
+      throw new Error(`FLUX job ${taskId} failed: ${status}`);
     }
 
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -99,9 +148,7 @@ export class FluxImageProvider implements ImageProvider {
     const { tier, model } = resolveFluxModel(input.quality);
 
     const endpoint =
-      tier === 'max'
-        ? '/flux-pro-1.1-ultra'
-        : '/flux-pro-1.1';
+      tier === 'max' ? '/flux-pro-1.1-ultra' : '/flux-pro-1.1';
 
     const payload: Record<string, unknown> = {
       prompt: input.prompt,
@@ -115,25 +162,22 @@ export class FluxImageProvider implements ImageProvider {
       delete payload.height;
     }
 
-    const submitRes = (await fluxFetch(endpoint, payload)) as FluxSubmitResponse;
+    const submitRaw = await fluxFetch(endpoint, payload);
+    const taskId = extractSubmitId(submitRaw);
 
-    if (!submitRes.id) {
-      throw new Error('FLUX: no task ID returned');
-    }
+    const pollResult = await pollUntilReady(taskId);
 
-    const result = await pollUntilReady(submitRes.id);
-
-    const imageUrl = result.result?.sample;
+    const imageUrl = extractImageUrl(pollResult);
     if (!imageUrl) {
-      throw new Error('FLUX: no image in result');
+      throw new Error('FLUX: no image URL in result');
     }
 
     return {
       images: [
         {
           url: imageUrl,
-          width: input.size.width,
-          height: input.size.height,
+          width: input.size.width || 1024,
+          height: input.size.height || 1024,
         },
       ],
       model,
@@ -154,16 +198,13 @@ export class FluxImageProvider implements ImageProvider {
       payload.mask = input.mask;
     }
 
-    const submitRes = (await fluxFetch('/flux-pro-1.1/edit', payload)) as FluxSubmitResponse;
+    const submitRaw = await fluxFetch('/flux-pro-1.1/edit', payload);
+    const taskId = extractSubmitId(submitRaw);
 
-    if (!submitRes.id) {
-      throw new Error('FLUX edit: no task ID returned');
-    }
-
-    const result = await pollUntilReady(submitRes.id);
-    const imageUrl = result.result?.sample;
+    const pollResult = await pollUntilReady(taskId);
+    const imageUrl = extractImageUrl(pollResult);
     if (!imageUrl) {
-      throw new Error('FLUX edit: no image in result');
+      throw new Error('FLUX edit: no image URL in result');
     }
 
     return {
