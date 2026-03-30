@@ -145,6 +145,7 @@ export const imageRoutingService = {
       platform: input.platform,
       aspectRatio: input.aspectRatio,
       referenceImageIds: input.referenceImageIds,
+      referenceImageUrls: input.referenceImageUrls,
       brandKitId: input.brandKitId,
       exactTexts: input.exactTexts,
     });

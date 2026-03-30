@@ -30,6 +30,7 @@ interface AnalyzeInput {
   platform?: string;
   aspectRatio?: string;
   referenceImageIds?: string[];
+  referenceImageUrls?: string[];
   brandKitId?: string;
   exactTexts?: string[];
 }
@@ -91,7 +92,9 @@ function detectProductInfo(prompt: string): { name?: string; category?: string }
 export const requestUnderstandingService = {
   analyzeRequest(input: AnalyzeInput): NormalizedGenerationBrief {
     const { prompt } = input;
-    const refCount = input.referenceImageIds?.length ?? 0;
+    const refIdCount = input.referenceImageIds?.length ?? 0;
+    const refUrlCount = input.referenceImageUrls?.length ?? 0;
+    const refCount = Math.max(refIdCount, refUrlCount);
 
     const taskType = detectTaskType(prompt, refCount);
     const textReq = detectTextRequirement(prompt);

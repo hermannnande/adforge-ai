@@ -1,86 +1,102 @@
 import type { NormalizedGenerationBrief, PromptPackage, ProjectContext } from '@/lib/ai/types';
 import { TextRequirementMode } from '@/lib/ai/enums';
 
-const QUALITY_MAP: Record<string, string> = {
-  DRAFT: 'good quality, clean composition',
-  STANDARD: 'professional advertising photography, studio quality, sharp details, 4K resolution',
-  PREMIUM: 'ultra-high quality 8K, masterful composition, award-winning photography, cinematic lighting, professional retouching, commercial grade',
-};
-
 export function compileNanoBananaPrompt(
   brief: NormalizedGenerationBrief,
   context: ProjectContext,
 ): PromptPackage {
-  const parts: string[] = [];
+  const sections: string[] = [];
   const notes: string[] = [];
 
-  if (brief.needPhotorealism) {
-    parts.push('photorealistic professional advertising photograph');
-    parts.push('realistic lighting, natural shadows, depth of field, sharp focus');
-  } else if (brief.needPosterStyle) {
-    parts.push('professional advertising poster design');
-    parts.push('bold typography, clean layout, eye-catching composition');
-  } else {
-    parts.push('professional advertising visual');
+  // 1. Core visual direction
+  if (brief.referenceAssetCount > 0) {
+    sections.push(
+      'Create a professional advertising poster using the provided reference product image(s) as the EXACT product to feature.',
+      'The product from the reference image(s) MUST appear exactly as-is in the final composition — same shape, colors, packaging, branding, and text.',
+      'Do NOT replace, reimagine, or alter the product appearance in any way.',
+    );
+    notes.push(`${brief.referenceAssetCount} reference image(s) — product identity must be perfectly preserved`);
   }
 
+  if (brief.needPhotorealism) {
+    sections.push(
+      'Photorealistic commercial advertising photograph.',
+      'Studio-quality lighting with professional 3-point setup, natural shadows, shallow depth of field, razor-sharp product focus.',
+    );
+  } else if (brief.needPosterStyle) {
+    sections.push(
+      'Professional advertising poster design.',
+      'Bold headline typography, clear visual hierarchy, eye-catching layout, balanced white space.',
+    );
+  } else {
+    sections.push(
+      'Professional high-end advertising visual suitable for digital marketing campaigns.',
+    );
+  }
+
+  // 2. Product details
   if (brief.productName) {
-    parts.push(`featuring ${brief.productName} as the central subject`);
+    sections.push(`Central product: "${brief.productName}" — must be prominently featured as the hero element.`);
   }
   if (brief.productCategory) {
-    parts.push(`${brief.productCategory} product photography`);
+    sections.push(`Product category: ${brief.productCategory}.`);
   }
-
   if (brief.needProductFocus) {
-    parts.push('product is the focal point, centered composition, clean background');
+    sections.push('Product must be the dominant focal point, occupying at least 40% of the frame.');
   }
 
+  // 3. Style and aesthetic
   if (brief.styleIntent.length > 0) {
-    parts.push(brief.styleIntent.join(' and ') + ' aesthetic');
+    sections.push(`Visual style: ${brief.styleIntent.join(', ')}.`);
   }
 
+  // 4. Text elements
   if (brief.providedExactText.length > 0) {
     for (const t of brief.providedExactText) {
-      parts.push(`with visible text reading "${t}"`);
+      sections.push(`Include clearly visible, well-designed text: "${t}"`);
     }
-    notes.push('NanoBanana has strong text rendering — exact text should appear accurately');
   }
 
+  // 5. Brand kit
   if (context.brandKit) {
+    const bk: string[] = [];
     if (context.brandKit.primaryColors.length > 0) {
-      parts.push(`color palette: ${context.brandKit.primaryColors.join(', ')}`);
+      bk.push(`brand colors: ${context.brandKit.primaryColors.join(', ')}`);
     }
     if (context.brandKit.tone) {
-      parts.push(`${context.brandKit.tone} atmosphere`);
+      bk.push(`brand tone: ${context.brandKit.tone}`);
+    }
+    if (bk.length > 0) {
+      sections.push(`Brand guidelines: ${bk.join('; ')}.`);
     }
   }
 
+  // 6. Tone and mood
   if (context.settings.tone) {
-    parts.push(`${context.settings.tone} mood and atmosphere`);
+    sections.push(`Overall mood: ${context.settings.tone}.`);
   }
 
-  parts.push(QUALITY_MAP[brief.qualityMode] ?? QUALITY_MAP.STANDARD);
-
+  // 7. Positive constraints from user
   if (brief.positiveConstraints.length > 0) {
-    parts.push(brief.positiveConstraints.join(', '));
+    sections.push(brief.positiveConstraints.join('. ') + '.');
   }
 
-  if (brief.referenceAssetCount > 0) {
-    parts.push('maintain the same product, style, colors and identity as the reference image');
-    parts.push('preserve the exact visual appearance of the imported product');
-    notes.push(`${brief.referenceAssetCount} reference image(s) provided — visual consistency is critical`);
+  // 8. Negative constraints as avoidance instructions
+  if (brief.negativeConstraintsRaw.length > 0) {
+    sections.push(`Avoid: ${brief.negativeConstraintsRaw.join(', ')}.`);
   }
 
-  const negativePrompt = brief.negativeConstraintsRaw.length > 0
-    ? brief.negativeConstraintsRaw.join(', ')
-    : undefined;
+  // 9. Quality and resolution
+  sections.push(
+    'Output: ultra-high resolution, 4K, print-ready quality.',
+    'Clean composition, no artifacts, no watermarks, no blurring.',
+    'Professional commercial advertising standard — ready for Facebook Ads, Instagram, or print.',
+  );
 
-  if (negativePrompt) {
-    parts.push(`Avoid: ${negativePrompt}`);
-  }
+  const mainPrompt = sections.join('\n');
 
   return {
-    mainPrompt: parts.join(', '),
+    mainPrompt,
     negativePrompt: undefined,
     textHandlingMode: brief.needExactText ? TextRequirementMode.EXACT : brief.textRequirementMode,
     generationNotes: notes,
