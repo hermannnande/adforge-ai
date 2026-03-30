@@ -51,6 +51,60 @@ function extractText(responseParts: unknown[]): string {
     .trim();
 }
 
+async function toInlinePart(ref: string): Promise<InlineDataPart | null> {
+  if (ref.startsWith('data:')) {
+    const match = ref.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+    if (match) {
+      return { inlineData: { mimeType: match[1], data: match[2] } };
+    }
+  } else if (ref.startsWith('http')) {
+    try {
+      const response = await fetch(ref);
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        const contentType = response.headers.get('content-type') || 'image/png';
+        const base64 = Buffer.from(buffer).toString('base64');
+        return { inlineData: { mimeType: contentType, data: base64 } };
+      }
+      console.warn(`[NanoBanana] Failed to fetch reference image: ${ref.slice(0, 80)} (${response.status})`);
+    } catch (err) {
+      console.warn(`[NanoBanana] Could not fetch reference image: ${ref.slice(0, 80)}`, err);
+    }
+  }
+  return null;
+}
+
+/**
+ * Build multi-image reference instruction that tells Gemini HOW to use the images.
+ * Placed BEFORE the user prompt so the AI understands the context of the images
+ * it just "saw" in the inline data parts.
+ */
+function buildMultiImageInstruction(imageCount: number): string {
+  if (imageCount === 0) return '';
+
+  if (imageCount === 1) {
+    return (
+      'I have attached 1 reference image above. ' +
+      'You MUST use the EXACT content from this image in the final composition. ' +
+      'If it shows a product, reproduce that EXACT product (same packaging, colors, label, shape). ' +
+      'If it shows a person, reproduce that person faithfully. ' +
+      'Do NOT replace or substitute it with a different product or person.\n\n'
+    );
+  }
+
+  return (
+    `I have attached ${imageCount} reference images above. ` +
+    'You MUST use the EXACT content from ALL of these images in the final composition. ' +
+    'Each image is a reference element that must be faithfully reproduced:\n' +
+    '- If an image shows a product: reproduce that EXACT product (same packaging, colors, label, shape, branding)\n' +
+    '- If an image shows a person: reproduce that person faithfully (appearance, style, pose)\n' +
+    '- If an image shows a logo or brand element: reproduce it exactly\n' +
+    '- If an image shows a style/mood reference: follow that visual direction\n' +
+    'Do NOT replace any image element with something different. ' +
+    'ALL reference images must be visible and combined coherently in the final result.\n\n'
+  );
+}
+
 export class NanoBananaImageProvider implements ImageProvider {
   readonly name: ImageProviderName = 'nanobanana';
 
@@ -59,49 +113,33 @@ export class NanoBananaImageProvider implements ImageProvider {
     const client = getClient();
 
     const parts: ContentPart[] = [];
+    let attachedCount = 0;
 
     if (input.referenceImages && input.referenceImages.length > 0) {
-      let attachedCount = 0;
-      for (const ref of input.referenceImages) {
-        if (ref.startsWith('data:')) {
-          const match = ref.match(/^data:(image\/[\w+]+);base64,(.+)$/);
-          if (match) {
-            parts.push({
-              inlineData: { mimeType: match[1], data: match[2] },
-            });
-            attachedCount++;
-          }
-        } else if (ref.startsWith('http')) {
-          try {
-            const response = await fetch(ref);
-            if (response.ok) {
-              const buffer = await response.arrayBuffer();
-              const contentType = response.headers.get('content-type') || 'image/png';
-              const base64 = Buffer.from(buffer).toString('base64');
-              parts.push({
-                inlineData: { mimeType: contentType, data: base64 },
-              });
-              attachedCount++;
-            } else {
-              console.warn(`[NanoBanana] Failed to fetch reference image: ${ref.slice(0, 80)} (${response.status})`);
-            }
-          } catch (err) {
-            console.warn(`[NanoBanana] Could not fetch reference image: ${ref.slice(0, 80)}`, err);
-          }
+      const inlinePromises = input.referenceImages.map(toInlinePart);
+      const inlineResults = await Promise.all(inlinePromises);
+
+      for (const inlinePart of inlineResults) {
+        if (inlinePart) {
+          parts.push(inlinePart);
+          attachedCount++;
         }
       }
       console.log(`[NanoBanana] Attached ${attachedCount}/${input.referenceImages.length} reference images`);
     }
 
-    parts.push({ text: input.prompt });
+    const multiImageInstruction = buildMultiImageInstruction(attachedCount);
+    const finalPrompt = multiImageInstruction + input.prompt;
 
-    console.log(`[NanoBanana] FINAL prompt sent to API: "${input.prompt.slice(0, 200)}"`);
-    console.log(`[NanoBanana] FINAL parts count: ${parts.length} (${parts.length - 1} images + 1 text)`);
+    parts.push({ text: finalPrompt });
+
+    console.log(`[NanoBanana] FINAL prompt sent to API (first 300 chars): "${finalPrompt.slice(0, 300)}"`);
+    console.log(`[NanoBanana] FINAL parts count: ${parts.length} (${attachedCount} images + 1 text)`);
 
     let lastError: Error | null = null;
 
     for (const modelId of MODELS) {
-      console.log(`[NanoBanana] Trying model=${modelId}, ${parts.length} parts (${parts.length - 1} ref images)`);
+      console.log(`[NanoBanana] Trying model=${modelId}, ${parts.length} parts (${attachedCount} ref images)`);
 
       try {
         const response = await client.models.generateContent({
