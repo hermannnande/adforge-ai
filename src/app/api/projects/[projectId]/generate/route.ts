@@ -5,6 +5,8 @@ import { generationService } from '@/server/services/generation.service';
 import type { QualityMode } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 
+export const maxDuration = 120;
+
 const VALID_PROVIDERS = new Set(['openai', 'flux', 'ideogram']);
 
 export async function POST(

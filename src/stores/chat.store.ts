@@ -170,11 +170,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (data.strategy) setStrategy(data.strategy);
       setShouldGenerate(data.shouldGenerate ?? false);
     } catch (err) {
-      const errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      let errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      if (/fetch failed|network|abort|timeout/i.test(errMessage)) {
+        errMessage = 'Le service est temporairement indisponible. Veuillez réessayer dans quelques instants.';
+      }
       setError(errMessage);
       addMessage({
         role: 'assistant',
-        content: `Désolé, une erreur est survenue : ${errMessage}`,
+        content: errMessage,
       });
     } finally {
       setLoading(false);

@@ -168,7 +168,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ selectedImageId: images[0].id });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      let msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      if (/fetch failed|network|abort|timeout/i.test(msg)) {
+        msg = 'La génération a pris trop de temps ou le réseau est indisponible. Réessayez.';
+      }
       setGenerationError(msg);
     } finally {
       setGenerating(false);

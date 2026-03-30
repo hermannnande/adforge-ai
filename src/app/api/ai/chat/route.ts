@@ -7,6 +7,8 @@ import { getServerAuth } from '@/lib/auth';
 import { projectService } from '@/server/services/project.service';
 import { userService } from '@/server/services/user.service';
 
+export const maxDuration = 120;
+
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }

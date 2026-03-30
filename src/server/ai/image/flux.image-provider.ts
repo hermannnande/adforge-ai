@@ -36,21 +36,44 @@ function getConfig() {
 async function fluxFetch(path: string, body?: unknown): Promise<unknown> {
   const { apiKey, baseUrl } = getConfig();
   const url = `${baseUrl}${path}`;
-  const res = await fetch(url, {
-    method: body ? 'POST' : 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Key': apiKey,
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`FLUX API error ${res.status}: ${text.slice(0, 300)}`);
+  if (!apiKey) {
+    throw new Error('FLUX API key not configured');
   }
 
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    console.log(`[FLUX] ${body ? 'POST' : 'GET'} ${url}`);
+
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Key': apiKey,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`FLUX API error ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`FLUX API timeout on ${path}`);
+    }
+    if (err instanceof TypeError && /fetch failed|network/i.test(err.message)) {
+      throw new Error(`FLUX API network error: cannot reach ${baseUrl} — ${err.message}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 interface FluxSubmitRaw {
