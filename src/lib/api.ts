@@ -18,5 +18,19 @@ export async function authFetch(
   if (auth.sessionId) {
     headers.set('x-clerk-session-id', auth.sessionId);
   }
+
+  const isLongRunning =
+    url.includes('/generate') || url.includes('/ai/chat');
+
+  if (isLongRunning && !init?.signal) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 150_000);
+    try {
+      return await fetch(url, { ...init, headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   return fetch(url, { ...init, headers });
 }

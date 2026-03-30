@@ -171,8 +171,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setShouldGenerate(data.shouldGenerate ?? false);
     } catch (err) {
       let errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
-      if (/fetch failed|network|abort|timeout/i.test(errMessage)) {
-        errMessage = 'Le service est temporairement indisponible. Veuillez réessayer dans quelques instants.';
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        errMessage = 'La réponse a pris trop de temps. Le service est peut-être surchargé — réessayez dans un moment.';
+      } else if (/fetch failed|network/i.test(errMessage)) {
+        errMessage = 'Problème de connexion au serveur. Vérifiez votre réseau et réessayez.';
       }
       setError(errMessage);
       addMessage({

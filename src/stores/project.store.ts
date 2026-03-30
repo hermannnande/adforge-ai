@@ -169,8 +169,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
     } catch (err) {
       let msg = err instanceof Error ? err.message : 'Erreur inconnue';
-      if (/fetch failed|network|abort|timeout/i.test(msg)) {
-        msg = 'La génération a pris trop de temps ou le réseau est indisponible. Réessayez.';
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        msg = 'La génération a dépassé le temps maximal. Le moteur est peut-être surchargé — réessayez dans un moment.';
+      } else if (/fetch failed|network/i.test(msg)) {
+        msg = 'Problème de connexion au serveur. Vérifiez votre réseau et réessayez.';
       }
       setGenerationError(msg);
     } finally {
