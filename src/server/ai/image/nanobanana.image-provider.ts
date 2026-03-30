@@ -9,7 +9,7 @@ import type {
 } from './types';
 import { PROVIDER_FEATURES } from './types';
 
-const IMAGE_MODEL = 'gemini-2.0-flash-preview-image-generation';
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 function getClient(): GoogleGenAI {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
