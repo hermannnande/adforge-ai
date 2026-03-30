@@ -185,9 +185,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         msg = 'La génération a dépassé le temps maximal. Le moteur est peut-être surchargé — réessayez dans un moment.';
       } else if (/fetch failed|network/i.test(msg)) {
         msg = 'Problème de connexion au serveur. Vérifiez votre réseau et réessayez.';
+      } else if (/filtré|sécurité|safety|reformuler/i.test(msg)) {
+        msg = 'Votre demande a été filtrée par le système de sécurité. Essayez de reformuler votre requête.';
       } else if (/billing|quota|rate.?limit|exceeded|429|403/i.test(msg)) {
         msg = 'Le service de génération est temporairement indisponible. Veuillez réessayer dans quelques instants.';
-      } else if (/openai|flux|ideogram|google/i.test(msg)) {
+      } else if (/openai|flux|ideogram|google|nanobanana/i.test(msg)) {
         msg = 'La génération a rencontré une erreur. Veuillez réessayer.';
       }
       setGenerationError(msg);

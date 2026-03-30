@@ -9,7 +9,9 @@ import type {
 } from './types';
 import { PROVIDER_FEATURES } from './types';
 
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const MODELS = [
+  'gemini-2.5-flash-image',
+] as const;
 
 function getClient(): GoogleGenAI {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
@@ -29,6 +31,25 @@ interface TextPart {
 }
 
 type ContentPart = InlineDataPart | TextPart;
+
+function extractImage(responseParts: unknown[]): { base64: string; mimeType: string } | null {
+  for (const part of responseParts) {
+    const p = part as unknown as Record<string, unknown>;
+    const inline = p.inlineData as { mimeType: string; data: string } | undefined;
+    if (inline?.data) {
+      return { base64: inline.data, mimeType: inline.mimeType || 'image/png' };
+    }
+  }
+  return null;
+}
+
+function extractText(responseParts: unknown[]): string {
+  return (responseParts as Array<Record<string, unknown>>)
+    .filter((p) => typeof p.text === 'string')
+    .map((p) => p.text as string)
+    .join(' ')
+    .trim();
+}
 
 export class NanoBananaImageProvider implements ImageProvider {
   readonly name: ImageProviderName = 'nanobanana';
@@ -54,66 +75,65 @@ export class NanoBananaImageProvider implements ImageProvider {
 
     parts.push({ text: input.prompt });
 
-    console.log(`[NanoBanana] Generating with model=${IMAGE_MODEL}, ${parts.length} parts (${parts.length - 1} ref images)`);
+    let lastError: Error | null = null;
 
-    let response;
-    try {
-      response = await client.models.generateContent({
-        model: IMAGE_MODEL,
-        contents: [{ role: 'user', parts }],
-        config: {
-          responseModalities: ['TEXT', 'IMAGE'],
-        },
-      });
-    } catch (apiError) {
-      const msg = apiError instanceof Error ? apiError.message : String(apiError);
-      console.error(`[NanoBanana] API call failed: ${msg}`);
-      throw new Error(`NanoBanana generation failed: ${msg}`);
-    }
+    for (const modelId of MODELS) {
+      console.log(`[NanoBanana] Trying model=${modelId}, ${parts.length} parts (${parts.length - 1} ref images)`);
 
-    const responseParts = response.candidates?.[0]?.content?.parts ?? [];
+      try {
+        const response = await client.models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts }],
+          config: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        });
 
-    let imageBase64: string | null = null;
-    let imageMimeType = 'image/png';
+        const responseParts = response.candidates?.[0]?.content?.parts ?? [];
+        const image = extractImage(responseParts);
 
-    for (const part of responseParts) {
-      const p = part as unknown as Record<string, unknown>;
-      const inline = p.inlineData as { mimeType: string; data: string } | undefined;
-      if (inline?.data) {
-        imageBase64 = inline.data;
-        imageMimeType = inline.mimeType || 'image/png';
-        break;
+        if (image) {
+          const dataUrl = `data:${image.mimeType};base64,${image.base64}`;
+          console.log(`[NanoBanana] Image generated with ${modelId} in ${Math.round(performance.now() - started)}ms`);
+
+          return {
+            images: [
+              {
+                url: dataUrl,
+                base64: image.base64,
+                width: input.size.width || 1024,
+                height: input.size.height || 1024,
+              },
+            ],
+            model: modelId,
+            provider: 'nanobanana',
+            durationMs: Math.round(performance.now() - started),
+          };
+        }
+
+        const textContent = extractText(responseParts);
+        if (/sorry|cannot|can't|unable|refuse|inappropriate|safety/i.test(textContent)) {
+          console.warn(`[NanoBanana] Safety filter with ${modelId}: ${textContent.slice(0, 200)}`);
+          throw new Error(
+            'Le contenu de votre demande a été filtré par le système de sécurité. Essayez de reformuler votre requête.',
+          );
+        }
+
+        console.warn(`[NanoBanana] No image from ${modelId}. Text: ${textContent.slice(0, 200)}`);
+        lastError = new Error(`No image from ${modelId}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+
+        if (/safety|filtré|reformuler/i.test(msg)) {
+          throw err;
+        }
+
+        console.error(`[NanoBanana] Model ${modelId} failed: ${msg.slice(0, 300)}`);
+        lastError = err instanceof Error ? err : new Error(msg);
       }
     }
 
-    if (!imageBase64) {
-      const textParts = responseParts.filter(
-        (p) => (p as unknown as Record<string, unknown>).text,
-      );
-      const textContent = textParts
-        .map((p) => (p as unknown as { text: string }).text)
-        .join(' ');
-      console.error(`[NanoBanana] No image data. Text response: ${textContent.slice(0, 300)}`);
-      throw new Error(`NanoBanana: no image generated. ${textContent.slice(0, 200)}`);
-    }
-
-    const dataUrl = `data:${imageMimeType};base64,${imageBase64}`;
-
-    console.log(`[NanoBanana] Image generated in ${Math.round(performance.now() - started)}ms`);
-
-    return {
-      images: [
-        {
-          url: dataUrl,
-          base64: imageBase64,
-          width: input.size.width || 1024,
-          height: input.size.height || 1024,
-        },
-      ],
-      model: IMAGE_MODEL,
-      provider: 'nanobanana',
-      durationMs: Math.round(performance.now() - started),
-    };
+    throw lastError ?? new Error('NanoBanana: all models failed');
   }
 
   async editImage(input: ImageEditInput): Promise<ImageProviderResult> {
@@ -134,7 +154,7 @@ export class NanoBananaImageProvider implements ImageProvider {
     parts.push({ text: `Edit this image: ${input.prompt}` });
 
     const response = await client.models.generateContent({
-      model: IMAGE_MODEL,
+      model: MODELS[0],
       contents: [{ role: 'user', parts }],
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
@@ -142,33 +162,28 @@ export class NanoBananaImageProvider implements ImageProvider {
     });
 
     const responseParts = response.candidates?.[0]?.content?.parts ?? [];
-    let imageBase64: string | null = null;
-    let imageMimeType = 'image/png';
+    const image = extractImage(responseParts);
 
-    for (const part of responseParts) {
-      const p = part as unknown as Record<string, unknown>;
-      const inline = p.inlineData as { mimeType: string; data: string } | undefined;
-      if (inline?.data) {
-        imageBase64 = inline.data;
-        imageMimeType = inline.mimeType || 'image/png';
-        break;
+    if (!image) {
+      const textContent = extractText(responseParts);
+      if (/sorry|cannot|can't|unable|refuse|inappropriate|safety/i.test(textContent)) {
+        throw new Error(
+          'Le contenu de votre demande a été filtré par le système de sécurité. Essayez de reformuler votre requête.',
+        );
       }
-    }
-
-    if (!imageBase64) {
       throw new Error('NanoBanana edit: no image in response');
     }
 
     return {
       images: [
         {
-          url: `data:${imageMimeType};base64,${imageBase64}`,
-          base64: imageBase64,
+          url: `data:${image.mimeType};base64,${image.base64}`,
+          base64: image.base64,
           width: input.size?.width ?? 1024,
           height: input.size?.height ?? 1024,
         },
       ],
-      model: IMAGE_MODEL,
+      model: MODELS[0],
       provider: 'nanobanana',
       durationMs: Math.round(performance.now() - started),
     };
