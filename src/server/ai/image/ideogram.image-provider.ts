@@ -57,14 +57,25 @@ function mapQualityToModel(quality: string): string {
   }
 }
 
-interface IdeogramImage {
-  url: string;
-  resolution: { width: number; height: number };
-  is_image_safe: boolean;
+interface IdeogramImageRaw {
+  url?: string;
+  resolution?: { width?: number; height?: number };
+  is_image_safe?: boolean;
 }
 
 interface IdeogramGenerateResponse {
-  data: IdeogramImage[];
+  data?: IdeogramImageRaw[];
+}
+
+function extractImage(
+  raw: IdeogramImageRaw,
+  fallbackW: number,
+  fallbackH: number,
+) {
+  const url = raw.url ?? '';
+  const width = raw.resolution?.width ?? fallbackW;
+  const height = raw.resolution?.height ?? fallbackH;
+  return { url, width, height };
 }
 
 export class IdeogramImageProvider implements ImageProvider {
@@ -96,16 +107,15 @@ export class IdeogramImageProvider implements ImageProvider {
       payload,
     )) as IdeogramGenerateResponse;
 
-    if (!res.data?.length) {
+    const items = res.data?.filter((d) => d.url);
+    if (!items?.length) {
       throw new Error('Ideogram: no images returned');
     }
 
     return {
-      images: res.data.map((img) => ({
-        url: img.url,
-        width: img.resolution.width,
-        height: img.resolution.height,
-      })),
+      images: items.map((img) =>
+        extractImage(img, input.size.width, input.size.height),
+      ),
       model: `ideogram-${model.toLowerCase()}`,
       provider: 'ideogram',
       durationMs: Math.round(performance.now() - started),
@@ -137,16 +147,15 @@ export class IdeogramImageProvider implements ImageProvider {
       payload,
     )) as IdeogramGenerateResponse;
 
-    if (!res.data?.length) {
+    const items = res.data?.filter((d) => d.url);
+    if (!items?.length) {
       throw new Error('Ideogram edit: no images returned');
     }
 
     return {
-      images: res.data.map((img) => ({
-        url: img.url,
-        width: img.resolution.width,
-        height: img.resolution.height,
-      })),
+      images: items.map((img) =>
+        extractImage(img, input.size?.width ?? 1024, input.size?.height ?? 1024),
+      ),
       model: 'ideogram-v2-edit',
       provider: 'ideogram',
       durationMs: Math.round(performance.now() - started),
@@ -173,16 +182,15 @@ export class IdeogramImageProvider implements ImageProvider {
       payload,
     )) as IdeogramGenerateResponse;
 
-    if (!res.data?.length) {
+    const items = res.data?.filter((d) => d.url);
+    if (!items?.length) {
       throw new Error('Ideogram reframe: no images returned');
     }
 
     return {
-      images: res.data.map((img) => ({
-        url: img.url,
-        width: img.resolution.width,
-        height: img.resolution.height,
-      })),
+      images: items.map((img) =>
+        extractImage(img, input.size?.width ?? 1024, input.size?.height ?? 1024),
+      ),
       model: 'ideogram-v2-reframe',
       provider: 'ideogram',
       durationMs: Math.round(performance.now() - started),
@@ -206,16 +214,15 @@ export class IdeogramImageProvider implements ImageProvider {
       payload,
     )) as IdeogramGenerateResponse;
 
-    if (!res.data?.length) {
+    const items = res.data?.filter((d) => d.url);
+    if (!items?.length) {
       throw new Error('Ideogram bg replace: no images returned');
     }
 
     return {
-      images: res.data.map((img) => ({
-        url: img.url,
-        width: img.resolution.width,
-        height: img.resolution.height,
-      })),
+      images: items.map((img) =>
+        extractImage(img, input.size?.width ?? 1024, input.size?.height ?? 1024),
+      ),
       model: 'ideogram-v2-bg-replace',
       provider: 'ideogram',
       durationMs: Math.round(performance.now() - started),
