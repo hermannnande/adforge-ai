@@ -84,7 +84,21 @@ export const generationService = {
       aspectRatio: params.aspectRatio,
     });
 
-    const enrichedPrompt = canonicalBriefBuilder.toPromptContext(canonicalBrief) + '\n\n' + params.prompt;
+    const contextHints: string[] = [];
+
+    if (canonicalBrief.product.hasImportedReference) {
+      contextHints.push('Use the provided reference image(s) as the EXACT product to feature — preserve its appearance faithfully.');
+    }
+    if (canonicalBrief.conversation.projectGoal) {
+      contextHints.push(`Project goal: ${canonicalBrief.conversation.projectGoal}`);
+    }
+    if (canonicalBrief.isOnlyDelta && canonicalBrief.constraints.requestedChanges.length > 0) {
+      contextHints.push(`Changes requested: ${canonicalBrief.constraints.requestedChanges.join(', ')}. Keep everything else the same.`);
+    }
+
+    const enrichedPrompt = contextHints.length > 0
+      ? params.prompt + '\n\n[Context: ' + contextHints.join(' | ') + ']'
+      : params.prompt;
 
     let refUrls = params.referenceImageUrls ?? [];
     if (refUrls.length === 0 && lockedProduct) {
@@ -99,6 +113,7 @@ export const generationService = {
 
     const routingInput: SmartRoutingInput = {
       prompt: enrichedPrompt,
+      originalUserPrompt: params.prompt,
       projectId: params.projectId,
       workspaceId: params.workspaceId,
       conversationId: params.conversationId,

@@ -5,95 +5,48 @@ export function compileNanoBananaPrompt(
   brief: NormalizedGenerationBrief,
   context: ProjectContext,
 ): PromptPackage {
-  const sections: string[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
   const notes: string[] = [];
 
-  // 1. Core visual direction
   if (brief.referenceAssetCount > 0) {
-    sections.push(
-      'Create a professional advertising poster using the provided reference product image(s) as the EXACT product to feature.',
-      'The product from the reference image(s) MUST appear exactly as-is in the final composition — same shape, colors, packaging, branding, and text.',
-      'Do NOT replace, reimagine, or alter the product appearance in any way.',
+    before.push(
+      `Use the ${brief.referenceAssetCount} provided reference image(s) as the exact product to feature in the poster.`,
+      'Keep the product appearance, packaging, colors, shape, and branding exactly as shown in the reference.',
     );
-    notes.push(`${brief.referenceAssetCount} reference image(s) — product identity must be perfectly preserved`);
+    notes.push(`${brief.referenceAssetCount} reference image(s) — product identity must be preserved`);
   }
+
+  after.push('Professional advertising visual, high quality, clean composition, 4K resolution.');
 
   if (brief.needPhotorealism) {
-    sections.push(
-      'Photorealistic commercial advertising photograph.',
-      'Studio-quality lighting with professional 3-point setup, natural shadows, shallow depth of field, razor-sharp product focus.',
-    );
-  } else if (brief.needPosterStyle) {
-    sections.push(
-      'Professional advertising poster design.',
-      'Bold headline typography, clear visual hierarchy, eye-catching layout, balanced white space.',
-    );
-  } else {
-    sections.push(
-      'Professional high-end advertising visual suitable for digital marketing campaigns.',
-    );
+    after.push('Photorealistic style, studio lighting, sharp focus.');
   }
 
-  // 2. Product details
-  if (brief.productName) {
-    sections.push(`Central product: "${brief.productName}" — must be prominently featured as the hero element.`);
-  }
-  if (brief.productCategory) {
-    sections.push(`Product category: ${brief.productCategory}.`);
-  }
-  if (brief.needProductFocus) {
-    sections.push('Product must be the dominant focal point, occupying at least 40% of the frame.');
-  }
-
-  // 3. Style and aesthetic
-  if (brief.styleIntent.length > 0) {
-    sections.push(`Visual style: ${brief.styleIntent.join(', ')}.`);
-  }
-
-  // 4. Text elements
   if (brief.providedExactText.length > 0) {
     for (const t of brief.providedExactText) {
-      sections.push(`Include clearly visible, well-designed text: "${t}"`);
+      after.push(`Include visible text: "${t}"`);
     }
   }
 
-  // 5. Brand kit
   if (context.brandKit) {
     const bk: string[] = [];
     if (context.brandKit.primaryColors.length > 0) {
-      bk.push(`brand colors: ${context.brandKit.primaryColors.join(', ')}`);
+      bk.push(`colors: ${context.brandKit.primaryColors.join(', ')}`);
     }
     if (context.brandKit.tone) {
-      bk.push(`brand tone: ${context.brandKit.tone}`);
+      bk.push(`tone: ${context.brandKit.tone}`);
     }
     if (bk.length > 0) {
-      sections.push(`Brand guidelines: ${bk.join('; ')}.`);
+      after.push(`Brand: ${bk.join(', ')}.`);
     }
   }
 
-  // 6. Tone and mood
-  if (context.settings.tone) {
-    sections.push(`Overall mood: ${context.settings.tone}.`);
-  }
-
-  // 7. Positive constraints from user
-  if (brief.positiveConstraints.length > 0) {
-    sections.push(brief.positiveConstraints.join('. ') + '.');
-  }
-
-  // 8. Negative constraints as avoidance instructions
-  if (brief.negativeConstraintsRaw.length > 0) {
-    sections.push(`Avoid: ${brief.negativeConstraintsRaw.join(', ')}.`);
-  }
-
-  // 9. Quality and resolution
-  sections.push(
-    'Output: ultra-high resolution, 4K, print-ready quality.',
-    'Clean composition, no artifacts, no watermarks, no blurring.',
-    'Professional commercial advertising standard — ready for Facebook Ads, Instagram, or print.',
-  );
-
-  const mainPrompt = sections.join('\n');
+  const mainPrompt = [
+    ...before,
+    brief.rawUserPrompt,
+    ...after,
+  ].join('\n');
 
   return {
     mainPrompt,

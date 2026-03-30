@@ -20,6 +20,7 @@ import type { ImageProviderName, ImageGenerateInput } from '@/server/ai/image';
 
 export interface SmartRoutingInput {
   prompt: string;
+  originalUserPrompt?: string;
   projectId: string;
   workspaceId: string;
   conversationId?: string;
@@ -149,6 +150,10 @@ export const imageRoutingService = {
       brandKitId: input.brandKitId,
       exactTexts: input.exactTexts,
     });
+
+    if (input.originalUserPrompt) {
+      (brief as { rawUserPrompt: string }).rawUserPrompt = input.originalUserPrompt;
+    }
 
     const context = await projectContextAssembler.build(
       input.projectId,
