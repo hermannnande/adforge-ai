@@ -49,6 +49,7 @@ export const generationService = {
     brandKitId?: string;
     conversationId?: string;
     referenceImageIds?: string[];
+    referenceImageUrls?: string[];
     exactTexts?: string[];
   }) {
     const quality = qualityModeToCompose(params.qualityMode);
@@ -62,6 +63,7 @@ export const generationService = {
       platform: params.platform,
       aspectRatio: params.aspectRatio,
       referenceImageIds: params.referenceImageIds,
+      referenceImageUrls: params.referenceImageUrls,
       brandKitId: params.brandKitId,
       providerOverride: params.providerOverride,
       exactTexts: params.exactTexts,

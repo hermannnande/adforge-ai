@@ -51,6 +51,7 @@ export function StudioShell({
   const shouldGenerate = useChatStore((s) => s.shouldGenerate);
   const selectedSuggestionIndex = useChatStore((s) => s.selectedSuggestionIndex);
   const setShouldGenerate = useChatStore((s) => s.setShouldGenerate);
+  const lastReferenceImageUrls = useChatStore((s) => s.lastReferenceImageUrls);
 
   const projectReset = useProjectStore((s) => s.reset);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
@@ -80,10 +81,12 @@ export function StudioShell({
     triggerGeneration(projectId, brief, suggestion, auth, {
       platform,
       provider: selectedProvider === 'auto' ? undefined : selectedProvider,
+      referenceImageUrls: lastReferenceImageUrls.length > 0 ? lastReferenceImageUrls : undefined,
     });
   }, [
     shouldGenerate, isGenerating, brief, strategy, selectedSuggestionIndex,
     setShouldGenerate, triggerGeneration, projectId, auth, platform, selectedProvider,
+    lastReferenceImageUrls,
   ]);
 
   const handleGenerate = useCallback(() => {
@@ -101,9 +104,10 @@ export function StudioShell({
       triggerGeneration(projectId, brief, suggestion, auth, {
         platform,
         provider: selectedProvider === 'auto' ? undefined : selectedProvider,
+        referenceImageUrls: lastReferenceImageUrls.length > 0 ? lastReferenceImageUrls : undefined,
       });
     }
-  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform, selectedProvider]);
+  }, [projectId, auth, brief, strategy, selectedSuggestionIndex, triggerGeneration, platform, selectedProvider, lastReferenceImageUrls]);
 
   const handleSelectForChat = useCallback((img: GeneratedImage) => {
     setChatReferenceImage(img);

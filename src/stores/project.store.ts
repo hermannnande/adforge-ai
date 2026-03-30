@@ -48,6 +48,7 @@ interface ProjectState {
       qualityMode?: string;
       platform?: string;
       provider?: string;
+      referenceImageUrls?: string[];
     },
   ) => Promise<void>;
 }
@@ -112,12 +113,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     setGenerationError(null);
 
     try {
+      const hasRefImages = options?.referenceImageUrls && options.referenceImageUrls.length > 0;
+
       const bodyPayload: Record<string, unknown> = {
         brief,
         suggestion,
         qualityMode: options?.qualityMode ?? 'STANDARD',
         platform: options?.platform ?? 'facebook',
       };
+
+      if (hasRefImages) {
+        const sug = suggestion as Record<string, string> | null;
+        bodyPayload.prompt =
+          (sug?.visualConcept ?? sug?.headline ?? '') +
+          ' — basé sur les images de référence fournies';
+        bodyPayload.referenceImageUrls = options!.referenceImageUrls;
+      }
+
       if (options?.provider) {
         bodyPayload.provider = options.provider;
       }

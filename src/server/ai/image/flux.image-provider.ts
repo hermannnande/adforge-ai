@@ -169,6 +169,16 @@ export class FluxImageProvider implements ImageProvider {
 
   async generateImage(input: ImageGenerateInput): Promise<ImageProviderResult> {
     const started = performance.now();
+
+    const hasReferenceImages =
+      input.referenceImages &&
+      input.referenceImages.length > 0 &&
+      input.referenceImages[0].startsWith('data:');
+
+    if (hasReferenceImages) {
+      return this.generateWithKontext(input, started);
+    }
+
     const { model, endpoint } = resolveFluxModel(input.quality);
 
     const payload: Record<string, unknown> = {
@@ -200,6 +210,41 @@ export class FluxImageProvider implements ImageProvider {
         },
       ],
       model,
+      provider: 'flux',
+      durationMs: Math.round(performance.now() - started),
+    };
+  }
+
+  private async generateWithKontext(
+    input: ImageGenerateInput,
+    started: number,
+  ): Promise<ImageProviderResult> {
+    const refImage = input.referenceImages![0];
+
+    const payload: Record<string, unknown> = {
+      prompt: input.prompt,
+      input_image: refImage,
+    };
+
+    console.log('[FLUX] Using flux-kontext-pro with reference image');
+
+    const { id, pollingUrl } = await submitGeneration('/flux-kontext-pro', payload);
+    const pollResult = await pollUntilReady(pollingUrl, id);
+
+    const imageUrl = extractImageUrl(pollResult);
+    if (!imageUrl) {
+      throw new Error('FLUX Kontext: no image URL in result');
+    }
+
+    return {
+      images: [
+        {
+          url: imageUrl,
+          width: input.size.width || 1024,
+          height: input.size.height || 1024,
+        },
+      ],
+      model: 'flux-kontext-pro',
       provider: 'flux',
       durationMs: Math.round(performance.now() - started),
     };

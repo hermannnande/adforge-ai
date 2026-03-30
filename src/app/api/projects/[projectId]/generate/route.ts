@@ -44,6 +44,8 @@ export async function POST(
         select: { brandKitId: true },
       });
 
+      const referenceImageUrls: string[] = body.referenceImageUrls ?? [];
+
       const result = await generationService.generateImageSmart({
         projectId,
         workspaceId: ctx.workspace.id,
@@ -54,6 +56,7 @@ export async function POST(
         brandKitId: project?.brandKitId ?? body.brandKitId,
         conversationId: body.conversationId,
         referenceImageIds: body.referenceImageIds ?? [],
+        referenceImageUrls,
         exactTexts: body.exactTexts ?? [],
         aspectRatio: body.aspectRatio,
       });

@@ -15,6 +15,7 @@ export interface ChatContext {
   messages: ChatMessage[];
   brief?: CreativeBrief;
   strategy?: CreativeStrategy;
+  referenceImageUrls?: string[];
   brandKit?: {
     name: string;
     tone?: string | null;

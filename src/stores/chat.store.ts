@@ -6,6 +6,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  imageUrls?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -49,6 +50,7 @@ interface ChatState {
   strategy: Strategy | null;
   shouldGenerate: boolean;
   selectedSuggestionIndex: number;
+  lastReferenceImageUrls: string[];
 
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   setLoading: (loading: boolean) => void;
@@ -59,7 +61,7 @@ interface ChatState {
   setSelectedSuggestion: (index: number) => void;
   reset: () => void;
 
-  sendMessage: (projectId: string, content: string, auth?: ChatAuthInfo) => Promise<void>;
+  sendMessage: (projectId: string, content: string, auth?: ChatAuthInfo, imageUrls?: string[]) => Promise<void>;
 }
 
 let messageCounter = 0;
@@ -88,6 +90,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   strategy: null,
   shouldGenerate: false,
   selectedSuggestionIndex: 0,
+  lastReferenceImageUrls: [],
 
   addMessage: (msg) => {
     const message: ChatMessage = {
@@ -114,9 +117,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       strategy: null,
       shouldGenerate: false,
       selectedSuggestionIndex: 0,
+      lastReferenceImageUrls: [],
     }),
 
-  sendMessage: async (projectId, content, auth) => {
+  sendMessage: async (projectId, content, auth, imageUrls) => {
     const { addMessage, setLoading, setError, setBrief, setStrategy, setShouldGenerate } = get();
 
     if (!projectId?.trim()) {
@@ -129,15 +133,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    addMessage({ role: 'user', content });
+    addMessage({ role: 'user', content, imageUrls });
     setLoading(true);
     setError(null);
 
     try {
+      const payload: Record<string, unknown> = { projectId, message: content };
+      if (imageUrls && imageUrls.length > 0) {
+        payload.referenceImageUrls = imageUrls;
+      }
+
       const fetchOpts: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, message: content }),
+        body: JSON.stringify(payload),
       };
 
       const res = auth
@@ -169,6 +178,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (data.brief) setBrief(data.brief);
       if (data.strategy) setStrategy(data.strategy);
       setShouldGenerate(data.shouldGenerate ?? false);
+
+      const refUrls = (data as Record<string, unknown>).referenceImageUrls;
+      if (Array.isArray(refUrls) && refUrls.length > 0) {
+        set({ lastReferenceImageUrls: refUrls as string[] });
+      } else if (imageUrls && imageUrls.length > 0) {
+        set({ lastReferenceImageUrls: imageUrls });
+      }
     } catch (err) {
       let errMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       if (err instanceof DOMException && err.name === 'AbortError') {

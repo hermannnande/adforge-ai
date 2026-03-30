@@ -26,6 +26,7 @@ export interface SmartRoutingInput {
   platform?: string;
   aspectRatio?: string;
   referenceImageIds?: string[];
+  referenceImageUrls?: string[];
   brandKitId?: string;
   providerOverride?: string;
   exactTexts?: string[];
@@ -69,6 +70,7 @@ function buildGenerateInput(
   provider: ProviderName,
   promptPackage: PromptPackage,
   brief: NormalizedGenerationBrief,
+  referenceImageUrls?: string[],
 ): ImageGenerateInput {
   const sizeMap: Record<string, { width: number; height: number }> = {
     '16:9': { width: 1344, height: 768 },
@@ -83,6 +85,12 @@ function buildGenerateInput(
     : brief.qualityMode === 'DRAFT' ? 'draft'
     : 'standard';
 
+  const refImages = referenceImageUrls && referenceImageUrls.length > 0
+    ? referenceImageUrls
+    : brief.referenceAssetIds.length > 0
+      ? brief.referenceAssetIds
+      : undefined;
+
   return {
     prompt: promptPackage.mainPrompt,
     negativePrompt: provider === ProviderName.FLUX ? undefined : promptPackage.negativePrompt,
@@ -90,7 +98,7 @@ function buildGenerateInput(
     quality,
     numberOfImages: 1,
     providerOverride: toImageProviderName(provider),
-    referenceImages: brief.referenceAssetIds.length > 0 ? brief.referenceAssetIds : undefined,
+    referenceImages: refImages,
   };
 }
 
@@ -153,8 +161,14 @@ export const imageRoutingService = {
       `[SmartRouting] Decision: ${decision.provider} | Task: ${brief.taskType} | Reasons: ${decision.reason.join(', ')}`,
     );
 
+    const refUrls = input.referenceImageUrls;
+
     const promptPackage = compileForProvider(decision.provider, brief, context);
-    const generateInput = buildGenerateInput(decision.provider, promptPackage, brief);
+    const generateInput = buildGenerateInput(decision.provider, promptPackage, brief, refUrls);
+
+    if (refUrls && refUrls.length > 0) {
+      console.log(`[SmartRouting] ${refUrls.length} reference image(s) attached`);
+    }
 
     let result: ProviderExecutionResult;
     let fallbackUsed = false;
@@ -175,7 +189,7 @@ export const imageRoutingService = {
         try {
           console.log(`[SmartRouting] Trying fallback: ${fb}`);
           const fbPrompt = compileForProvider(fb, brief, context);
-          const fbInput = buildGenerateInput(fb, fbPrompt, brief);
+          const fbInput = buildGenerateInput(fb, fbPrompt, brief, refUrls);
           fallbackResult = await executeProvider(fb, fbInput);
           fallbackUsed = true;
           fallbackProvider = fb;

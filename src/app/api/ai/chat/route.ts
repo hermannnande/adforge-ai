@@ -30,14 +30,14 @@ export async function POST(req: NextRequest) {
       return jsonError('Unauthorized', 401);
     }
 
-    let body: { projectId?: string; message?: string };
+    let body: { projectId?: string; message?: string; referenceImageUrls?: string[] };
     try {
-      body = (await req.json()) as { projectId?: string; message?: string };
+      body = (await req.json()) as { projectId?: string; message?: string; referenceImageUrls?: string[] };
     } catch {
       return jsonError('Invalid JSON body', 400);
     }
 
-    const { projectId, message } = body;
+    const { projectId, message, referenceImageUrls } = body;
 
     if (!projectId || !message?.trim()) {
       return jsonError('Missing projectId or message', 400);
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       projectId,
       messages,
       brandKit,
+      referenceImageUrls: referenceImageUrls?.filter((u) => typeof u === 'string' && u.length > 0),
     };
 
     let response;
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
       brief: response.brief,
       strategy: response.strategy,
       shouldGenerate: response.shouldGenerate,
+      referenceImageUrls: referenceImageUrls?.length ? referenceImageUrls : undefined,
     });
   } catch (error) {
     console.error('[AI Chat Error]', error);

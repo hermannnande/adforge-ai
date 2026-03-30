@@ -82,8 +82,10 @@ export function compileFluxPrompt(
     }
   }
 
-  if (brief.referenceAssetCount >= 2) {
-    notes.push('Multi-reference mode — FLUX excels at maintaining visual coherence');
+  if (brief.referenceAssetCount > 0) {
+    parts.push('maintain the same product, style, colors and identity as the reference image');
+    parts.push('keep visual consistency with the provided reference');
+    notes.push(`${brief.referenceAssetCount} reference image(s) provided — using Kontext for visual coherence`);
   }
 
   return {

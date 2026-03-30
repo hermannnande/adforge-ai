@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { authFetch } from '@/lib/api';
 import { useChatStore, type ChatAuthInfo } from '@/stores/chat.store';
 import { useProjectStore, type GeneratedImage } from '@/stores/project.store';
 
@@ -264,26 +265,58 @@ export function ChatPanel({ projectId, initialPrompt, referenceImage, onClearRef
     }
   }, [initialPrompt, projectId, auth, sendMessage, messages.length]);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
-    const imageUrls = attachedImages.map((img) => img.preview);
+    const filesToUpload = [...attachedImages];
     const hasRef = !!referenceImage;
     setInput('');
     setAttachedImages([]);
 
     let message = trimmed;
-    if (hasRef) {
+    if (hasRef && referenceImage) {
       message = `[Retouche sur image existante] ${trimmed}`;
       onClearReference?.();
     }
-    if (imageUrls.length > 0) {
-      message = `${message}\n\n[${imageUrls.length} image(s) de référence jointe(s)]`;
+
+    const allImageUrls: string[] = [];
+
+    if (hasRef && referenceImage) {
+      allImageUrls.push(referenceImage.url);
     }
 
-    sendMessage(projectId, message, auth);
+    if (filesToUpload.length > 0) {
+      try {
+        const formData = new FormData();
+        filesToUpload.forEach((img) => formData.append('files', img.file));
+
+        const uploadRes = await authFetch(
+          `/api/projects/${projectId}/assets`,
+          auth,
+          { method: 'POST', body: formData },
+        );
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          const uploadedUrls = (data.assets ?? []).map(
+            (a: { url: string }) => a.url,
+          );
+          allImageUrls.push(...uploadedUrls);
+        }
+      } catch {
+        // upload failed silently — send message without images
+      }
+
+      filesToUpload.forEach((img) => URL.revokeObjectURL(img.preview));
+    }
+
+    if (allImageUrls.length > 0) {
+      message = `${message}\n\n[${allImageUrls.length} image(s) de référence — générez un visuel cohérent avec ces images]`;
+    }
+
+    sendMessage(projectId, message, auth, allImageUrls.length > 0 ? allImageUrls : undefined);
     inputRef.current?.focus();
   };
 
@@ -401,6 +434,7 @@ export function ChatPanel({ projectId, initialPrompt, referenceImage, onClearRef
             key={msg.id}
             role={msg.role}
             content={msg.content}
+            images={msg.imageUrls}
             isLast={idx === messages.length - 1 && msg.role === 'assistant'}
             onRetry={
               idx === messages.length - 1 && msg.role === 'assistant'
