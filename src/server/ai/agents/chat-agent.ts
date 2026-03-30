@@ -34,8 +34,8 @@ export interface ChatResponse {
   metadata: Record<string, unknown>;
 }
 
-const UNAVAILABLE_MESSAGE =
-  "Le service de génération est momentanément indisponible. Notre équipe technique a été notifiée. Veuillez réessayer dans quelques minutes.";
+const GENERATION_KEYWORDS =
+  /g[ée]n[eè]r|cr[ée]|fais|montre|lance|visuel|affiche|image|poster|photo|design|logo/i;
 
 function humanizeAIError(raw: string): string {
   if (/429|quota|exceeded|billing/i.test(raw)) {
@@ -60,11 +60,94 @@ function humanizeAIError(raw: string): string {
   return 'Une erreur inattendue s\'est produite. Réessayez ou contactez le support si le problème persiste.';
 }
 
+/**
+ * Builds a basic brief from the raw user message when AI text analysis
+ * is unavailable (e.g. OpenAI quota exhausted). Uses simple heuristics.
+ */
+function buildFallbackBrief(userMessage: string): CreativeBrief {
+  const msg = userMessage.toLowerCase();
+
+  const categories: Record<string, string> = {
+    'basket|sneaker|chaussure|shoe': 'mode',
+    'restaurant|food|nourriture|pizza|burger': 'restauration',
+    'beaut[ée]|cosm[ée]ti|maquillage|skin|cream': 'beauté',
+    'immobilier|maison|appartement|house': 'immobilier',
+    'tech|app|logiciel|saas': 'technologie',
+    'sport|fitness|gym|muscul': 'sport',
+    'voiture|auto|car|v[ée]hicule': 'automobile',
+  };
+
+  let productCategory: string | null = null;
+  for (const [pattern, cat] of Object.entries(categories)) {
+    if (new RegExp(pattern, 'i').test(msg)) {
+      productCategory = cat;
+      break;
+    }
+  }
+
+  const cleaned = userMessage
+    .replace(GENERATION_KEYWORDS, '')
+    .replace(/une?|des?|du|le|la|les|de|pour|avec|sur/gi, '')
+    .trim();
+
+  const productName = cleaned.length > 2 ? cleaned : userMessage;
+
+  return {
+    productName,
+    productCategory,
+    targetAudience: null,
+    objective: 'promotion',
+    offer: null,
+    tone: 'moderne',
+    style: null,
+    platform: null,
+    constraints: [],
+    rawInput: userMessage,
+  };
+}
+
+function buildFallbackStrategy(brief: CreativeBrief): CreativeStrategy {
+  const name = brief.productName ?? 'produit';
+  return {
+    suggestions: [
+      {
+        headline: name.charAt(0).toUpperCase() + name.slice(1),
+        subHeadline: 'Découvrez notre sélection exclusive',
+        cta: 'Découvrir',
+        visualConcept: `Visuel publicitaire professionnel pour ${name}, composition moderne et épurée, éclairage studio`,
+        colorMood: 'Tons modernes et dynamiques',
+        reasoning: 'Visuel direct basé sur la demande utilisateur',
+      },
+    ],
+    recommendedApproach: 'Génération directe à partir du brief utilisateur.',
+    toneAdvice: 'Ton moderne et professionnel.',
+  };
+}
+
 export async function processChat(userMessage: string, context: ChatContext): Promise<ChatResponse> {
   const provider = aiRegistry.getDefaultTextProviderOrNull();
+  const isAskingToGenerate = GENERATION_KEYWORDS.test(userMessage);
+
   if (!provider) {
+    if (isAskingToGenerate) {
+      const brief = buildFallbackBrief(userMessage);
+      const strategy = buildFallbackStrategy(brief);
+      return {
+        message:
+          'Je lance la génération de votre visuel. ' +
+          'Le mode conversation enrichie est temporairement indisponible, ' +
+          'mais votre image sera créée avec nos moteurs de génération disponibles.',
+        brief,
+        strategy,
+        shouldGenerate: true,
+        metadata: { directMode: true },
+      };
+    }
     return {
-      message: UNAVAILABLE_MESSAGE,
+      message:
+        'Le service de conversation est momentanément indisponible. ' +
+        'Vous pouvez toujours demander une génération d\'image — tapez par exemple : ' +
+        '"Crée une affiche pour mon produit".',
       brief: context.brief ?? emptyBrief(userMessage),
       strategy: context.strategy,
       shouldGenerate: false,
@@ -90,9 +173,6 @@ export async function processChat(userMessage: string, context: ChatContext): Pr
     }
 
     const hasEnoughInfo = Boolean(brief.productName || brief.objective || brief.productCategory);
-    const isAskingToGenerate = /g[ée]n[eè]r|cr[ée]|fais|montre|lance|visuel|affiche|image/i.test(
-      userMessage,
-    );
 
     if (hasEnoughInfo && isAskingToGenerate && !strategy) {
       strategy = await generateCreativeStrategy(brief, {
@@ -151,6 +231,22 @@ ${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
     };
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
+
+    if (isAskingToGenerate) {
+      const fallbackBrief = brief ?? buildFallbackBrief(userMessage);
+      const fallbackStrategy = strategy ?? buildFallbackStrategy(fallbackBrief);
+      return {
+        message:
+          'Je lance la génération de votre visuel directement. ' +
+          'La conversation intelligente est temporairement limitée, ' +
+          'mais votre image sera créée avec le meilleur moteur disponible.',
+        brief: fallbackBrief,
+        strategy: fallbackStrategy,
+        shouldGenerate: true,
+        metadata: { directMode: true, originalError: raw },
+      };
+    }
+
     const friendly = humanizeAIError(raw);
     return {
       message: friendly,
