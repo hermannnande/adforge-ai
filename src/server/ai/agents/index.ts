@@ -1,4 +1,4 @@
-export { analyzeBrief, type CreativeBrief } from './brief-analyzer';
+export { analyzeBrief, emptyBrief, type CreativeBrief } from './brief-analyzer';
 export {
   generateCreativeStrategy,
   type CreativeStrategy,
@@ -11,3 +11,25 @@ export {
   type ChatMessage,
   type ChatResponse,
 } from './chat-agent';
+export {
+  analyzeImages,
+  summarizeVisionForPrompt,
+  type VisionAnalysis,
+} from './vision-analyzer';
+export {
+  matchMarketingTemplate,
+  composeVisualConceptFromTemplate,
+  pickHeadlineFromTemplate,
+  pickCtaFromTemplate,
+  getTemplateById,
+  getAllTemplates,
+  listAllSectors,
+  type MarketingTemplate,
+  type TemplateMatchResult,
+} from './marketing-templates';
+export {
+  decideAutoGenerate,
+  buildConfirmationMessage,
+  type AutoDecision,
+  type AutoDecisionInput,
+} from './auto-decision';

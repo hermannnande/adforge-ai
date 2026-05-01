@@ -1,5 +1,14 @@
 import { analyzeBrief, emptyBrief, type CreativeBrief } from './brief-analyzer';
 import { generateCreativeStrategy, type CreativeStrategy } from './creative-strategist';
+import { analyzeImages, summarizeVisionForPrompt, type VisionAnalysis } from './vision-analyzer';
+import {
+  matchMarketingTemplate,
+  composeVisualConceptFromTemplate,
+  pickHeadlineFromTemplate,
+  pickCtaFromTemplate,
+  type MarketingTemplate,
+} from './marketing-templates';
+import { decideAutoGenerate, buildConfirmationMessage } from './auto-decision';
 import { aiRegistry } from '@/server/ai/providers';
 
 export type ChatMessageRole = 'user' | 'assistant' | 'system';
@@ -35,234 +44,341 @@ export interface ChatResponse {
   metadata: Record<string, unknown>;
 }
 
-const GENERATION_KEYWORDS =
-  /g[ée]n[eè]r|cr[ée]|fais|montre|lance|visuel|affiche|image|poster|photo|design|logo/i;
-
-/* Error humanization removed — chat agent now always falls back gracefully
-   instead of showing error messages to the user. */
+const TRIVIAL_MSG_PATTERN =
+  /^\s*(salut|bonjour|hello|hi|hey|coucou|test|allo|aide|help|quoi|comment(\s*[çc]a\s*va)?|\?+|\.+|ok|oui|non|yes|no|merci|thanks?)\s*[!?.]*\s*$/i;
 
 /**
- * Builds a basic brief from the raw user message when AI text analysis
- * is unavailable (e.g. OpenAI quota exhausted). Uses simple heuristics.
+ * Construit une stratégie créative de fallback à partir d'un template marketing.
+ * Utilisé quand le LLM est indisponible OU pour court-circuiter en mode rapide.
  */
-function buildFallbackBrief(userMessage: string): CreativeBrief {
-  const msg = userMessage.toLowerCase();
-
-  const categories: Record<string, string> = {
-    'basket|sneaker|chaussure|shoe|nike|adidas|jordan': 'mode',
-    'restaurant|food|nourriture|pizza|burger|café|coffee': 'restauration',
-    'beaut[ée]|cosm[ée]ti|maquillage|skin|cream|parfum|soin': 'beauté',
-    'immobilier|maison|appartement|house|villa': 'immobilier',
-    'tech|app|logiciel|saas|mobile': 'technologie',
-    'sport|fitness|gym|muscul': 'sport',
-    'voiture|auto|car|v[ée]hicule': 'automobile',
-    'v[eê]tement|robe|costume|mode|fashion|tshirt|t-shirt': 'mode',
-    'cr[eè]me|verrue|peau|derma|pharma|médicament|santé': 'santé',
-  };
-
-  let productCategory: string | null = null;
-  for (const [pattern, cat] of Object.entries(categories)) {
-    if (new RegExp(pattern, 'i').test(msg)) {
-      productCategory = cat;
-      break;
-    }
-  }
-
-  const stopWords =
-    /\b(une?|des?|du|le|la|les|de|pour|avec|sur|dans|mon|ma|mes|un|ce|cette|qui|que|au|aux|en|et|ou|je|tu|il|nous|vous|ils|cre[eé]|genere|fais|fait|lance|montre|image|visuel|affiche|poster|photo|format|portrait|paysage)\b/gi;
-
-  const cleaned = userMessage.replace(stopWords, ' ').replace(/\s+/g, ' ').trim();
-  const productName = cleaned.length > 2 ? cleaned : userMessage;
-
-  const formatMatch = msg.match(/format\s*(portrait|paysage|carré|square|story|stories|16.9|9.16|4.3)/i);
-  const style = formatMatch ? formatMatch[1] : null;
-
-  const tonePatterns: Record<string, string> = {
-    'luxe|premium|haut de gamme|élégant': 'premium',
-    'fun|drôle|cool|jeune|dynamique': 'fun et dynamique',
-    'sérieux|corporate|professionnel|business': 'professionnel',
-    'naturel|bio|eco|vert': 'naturel et authentique',
-  };
-  let tone = 'moderne';
-  for (const [pattern, t] of Object.entries(tonePatterns)) {
-    if (new RegExp(pattern, 'i').test(msg)) {
-      tone = t;
-      break;
-    }
-  }
-
-  return {
-    productName,
-    productCategory,
-    targetAudience: null,
-    objective: 'promotion',
-    offer: null,
-    tone,
-    style,
-    platform: null,
-    constraints: [],
-    rawInput: userMessage,
-  };
-}
-
-function buildFallbackStrategy(brief: CreativeBrief): CreativeStrategy {
-  const name = brief.productName ?? 'produit';
-  const cat = brief.productCategory ?? 'produit';
-  const tone = brief.tone ?? 'moderne';
+function buildStrategyFromTemplate(
+  template: MarketingTemplate,
+  brief: CreativeBrief,
+  vision: VisionAnalysis | null,
+  qualityMode: 'draft' | 'standard' | 'premium',
+): CreativeStrategy {
+  const visionSummary = vision ? summarizeVisionForPrompt(vision) : null;
+  const visualConcept = composeVisualConceptFromTemplate({
+    template,
+    productName: brief.productName,
+    productCategory: brief.productCategory,
+    visionSummary,
+    qualityMode,
+  });
 
   return {
     suggestions: [
       {
-        headline: name.charAt(0).toUpperCase() + name.slice(1),
-        subHeadline: `Le meilleur choix en ${cat}`,
-        cta: 'Découvrir',
-        visualConcept:
-          `${name}, photographie publicitaire professionnelle, ` +
-          `composition soignée sur fond ${tone === 'premium' ? 'noir élégant avec reflets dorés' : 'épuré et lumineux'}, ` +
-          `éclairage studio, rendu haute qualité, style ${tone}`,
+        headline: pickHeadlineFromTemplate(template, brief.productName, brief.offer, 0),
+        subHeadline: brief.productDescription ?? template.toneAdvice,
+        cta: pickCtaFromTemplate(template, 0),
+        visualConcept,
         colorMood:
-          tone === 'premium'
-            ? 'Noir, or et blanc — ambiance luxe'
-            : tone === 'fun et dynamique'
-              ? 'Couleurs vives et contrastées — ambiance énergique'
-              : 'Tons neutres et modernes — ambiance professionnelle',
-        reasoning: `Visuel ${cat} avec un rendu ${tone}`,
+          template.colorPalettes[0]?.join(', ') ?? template.moodKeywords.slice(0, 3).join(', '),
+        reasoning: `Template ${template.sector}/${template.useCase} — ${template.toneAdvice}`,
+      },
+      {
+        headline: pickHeadlineFromTemplate(template, brief.productName, brief.offer, 1),
+        subHeadline: brief.productDescription ?? template.moodKeywords.slice(0, 2).join(' & '),
+        cta: pickCtaFromTemplate(template, 1),
+        visualConcept: composeVisualConceptFromTemplate({
+          template,
+          productName: brief.productName,
+          productCategory: brief.productCategory,
+          visionSummary,
+          qualityMode,
+        }),
+        colorMood:
+          template.colorPalettes[1]?.join(', ') ??
+          template.colorPalettes[0]?.join(', ') ??
+          'tons neutres',
+        reasoning: `Variante ${template.useCase} — angle alternatif`,
+      },
+      {
+        headline: pickHeadlineFromTemplate(template, brief.productName, brief.offer, 2),
+        subHeadline: brief.productDescription ?? `${template.sector} — qualité premium`,
+        cta: pickCtaFromTemplate(template, 2),
+        visualConcept: composeVisualConceptFromTemplate({
+          template,
+          productName: brief.productName,
+          productCategory: brief.productCategory,
+          visionSummary,
+          qualityMode,
+        }),
+        colorMood:
+          template.colorPalettes[2]?.join(', ') ??
+          template.colorPalettes[0]?.join(', ') ??
+          'tons signature',
+        reasoning: `Variante ${template.useCase} — palette alternative`,
       },
     ],
-    recommendedApproach: `Visuel centré sur ${name} avec une approche ${tone}.`,
-    toneAdvice: `Ton ${tone} adapté au secteur ${cat}.`,
+    recommendedApproach: `Approche ${template.sector} ${template.useCase} : ${template.toneAdvice}`,
+    toneAdvice: template.toneAdvice,
   };
 }
 
-export async function processChat(userMessage: string, context: ChatContext): Promise<ChatResponse> {
+/**
+ * Détermine le qualityMode par défaut basé sur le brief.
+ */
+function inferQualityMode(brief: CreativeBrief): 'draft' | 'standard' | 'premium' {
+  const text = `${brief.rawInput} ${brief.tone ?? ''} ${brief.style ?? ''}`.toLowerCase();
+  if (/luxe|premium|haut.?de.?gamme|chic|exception/i.test(text)) return 'premium';
+  if (/draft|brouillon|test|aperçu|rapide|preview/i.test(text)) return 'draft';
+  return 'standard';
+}
+
+/**
+ * Génère un court message confirmant la génération en cours, en utilisant
+ * le LLM pour être chaleureux/contextuel — fallback statique si LLM échoue.
+ */
+async function buildAssistantConfirmation(params: {
+  userMessage: string;
+  brief: CreativeBrief;
+  template: MarketingTemplate;
+  inferredFromVision: boolean;
+  qualityMode: 'draft' | 'standard' | 'premium';
+}): Promise<string> {
+  const { userMessage, brief, template, inferredFromVision, qualityMode } = params;
   const provider = aiRegistry.getDefaultTextProviderOrNull();
-  const isAskingToGenerate = GENERATION_KEYWORDS.test(userMessage);
 
-  if (!provider) {
-    if (isAskingToGenerate) {
-      const brief = buildFallbackBrief(userMessage);
-      const strategy = buildFallbackStrategy(brief);
-      return {
-        message:
-          `Parfait, je prépare votre visuel "${brief.productName ?? userMessage}" ! ` +
-          'Voici ma proposition — la génération est en cours.',
-        brief,
-        strategy,
-        shouldGenerate: true,
-        metadata: { directMode: true },
-      };
-    }
-    return {
-      message:
-        'Je suis prêt à créer vos visuels ! Décrivez ce que vous souhaitez, ' +
-        'par exemple : "Crée une affiche pour mon produit".',
-      brief: context.brief ?? emptyBrief(userMessage),
-      strategy: context.strategy,
-      shouldGenerate: false,
-      metadata: { unavailable: true },
-    };
-  }
+  const fallback = buildConfirmationMessage({
+    productName: brief.productName,
+    templateSector: template.sector,
+    inferredFromVision,
+    qualityMode,
+  });
 
-  let brief: CreativeBrief | undefined = context.brief;
-  let strategy: CreativeStrategy | undefined = context.strategy;
+  if (!provider) return fallback;
+
+  const visionLine = brief.visionAnalysis?.detectedProduct
+    ? `Image analysée : ${brief.visionAnalysis.detectedProduct}.`
+    : '';
+
+  const systemPrompt = `Tu es l'assistant créatif AdForge AI. Tu confirmes une génération en cours, en français.
+
+RÈGLES STRICTES :
+1. JAMAIS poser de question. JAMAIS demander d'info supplémentaire.
+2. Le visuel se génère automatiquement — tu ne fais qu'annoncer ce qui arrive.
+3. Maximum 2 phrases. Ton confiant, professionnel, chaleureux.
+4. Mentionne brièvement : le produit identifié + le style choisi.
+5. Termine par "Génération en cours..." ou "Voici votre visuel..." ou similaire.
+6. Pas de markdown lourd. Pas plus de 1 emoji.
+7. Si une image a été fournie, dis explicitement que tu l'as analysée et utilisée.`;
+
+  const userPrompt = `Message client : "${userMessage}"
+Brief détecté : produit="${brief.productName ?? 'non précisé'}", catégorie="${brief.productCategory ?? template.sector}", ton="${brief.tone ?? template.toneAdvice}"
+${visionLine}
+Template choisi : ${template.sector}/${template.useCase}
+Qualité : ${qualityMode}
+
+Écris UNE confirmation courte (max 2 phrases) annonçant que tu lances la génération.`;
 
   try {
-    if (!brief || context.messages.length <= 2) {
-      brief = await analyzeBrief(userMessage, {
-        brandKit: context.brandKit
-          ? {
-              name: context.brandKit.name,
-              tone: context.brandKit.tone,
-              forbiddenWords: context.brandKit.forbiddenWords,
-            }
-          : undefined,
-        previousMessages: context.messages.map((m) => ({ role: m.role, content: m.content })),
-      });
-    }
-
-    const hasEnoughInfo = Boolean(brief.productName || brief.objective || brief.productCategory);
-
-    if (hasEnoughInfo && isAskingToGenerate && !strategy) {
-      strategy = await generateCreativeStrategy(brief, {
-        count: 3,
-        brandKit: context.brandKit
-          ? {
-              primaryColors: context.brandKit.primaryColors,
-              tone: context.brandKit.tone,
-              preferredCTAs: context.brandKit.preferredCTAs,
-            }
-          : undefined,
-      });
-    }
-
-    const systemPrompt = `Tu es l'assistant créatif AdForge AI. Tu aides les utilisateurs à créer des visuels publicitaires professionnels.
-
-Règles :
-- Sois concis, professionnel mais amical, et en français
-- Si le brief est incomplet, pose UNE question pour obtenir l'info manquante la plus importante
-- Si tu as assez d'infos et une stratégie, présente les suggestions de façon engageante
-- Ne répète jamais le contenu JSON — reformule naturellement
-- Si l'utilisateur valide, confirme que la génération va commencer
-- Utilise des emojis avec parcimonie (max 1-2 par message)
-
-${context.brandKit ? `Brand Kit actif : "${context.brandKit.name}"` : ''}
-
-Brief actuel : ${JSON.stringify(brief)}
-${strategy ? `Stratégie proposée : ${JSON.stringify(strategy)}` : ''}`;
-
-    const conversationHistory = context.messages
-      .slice(-10)
-      .map((m) => `${m.role === 'user' ? 'Client' : 'Assistant'}: ${m.content}`)
-      .join('\n');
-
     const result = await provider.generateText({
       systemPrompt,
-      userPrompt: `${conversationHistory ? `Historique récent:\n${conversationHistory}\n\n` : ''}Client: ${userMessage}`,
+      userPrompt,
       temperature: 0.6,
-      maxTokens: 600,
+      maxTokens: 150,
       model: 'gpt-4o-mini',
     });
+    const text = result.text.trim();
+    return text.length > 10 ? text : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-    const shouldGenerate = Boolean(strategy && isAskingToGenerate && hasEnoughInfo);
+/**
+ * Génère un message de clarification quand le score est trop bas pour générer.
+ * Pose UNE seule question, courte et précise — JAMAIS plusieurs.
+ */
+async function buildClarificationMessage(params: {
+  userMessage: string;
+  brief: CreativeBrief;
+  hasReferenceImages: boolean;
+  conversationLength: number;
+}): Promise<string> {
+  const { userMessage, hasReferenceImages, conversationLength } = params;
+  const provider = aiRegistry.getDefaultTextProviderOrNull();
 
-    return {
-      message: result.text,
+  if (!provider) {
+    if (conversationLength <= 1) {
+      return (
+        '👋 Bienvenue ! Décrivez votre besoin en une phrase et j\'lance la création. ' +
+        'Exemple : "affiche pour ma crème anti-âge" ou ajoutez une image de votre produit.'
+      );
+    }
+    return 'Pour créer le visuel, dites-moi en une phrase ce que vous voulez promouvoir, ou ajoutez une image.';
+  }
+
+  const systemPrompt = `Tu es l'assistant créatif AdForge AI.
+
+Le client a envoyé un message trop court ou trivial pour générer un visuel.
+${hasReferenceImages ? 'Une image est fournie — utilise-la pour proposer une création.' : 'Aucune image fournie.'}
+
+RÈGLES STRICTES :
+1. UNE SEULE question, très courte (max 15 mots).
+2. Sois concret : demande "que voulez-vous vendre/promouvoir ?" — JAMAIS plusieurs questions enchaînées.
+3. Donne 1-2 exemples concrets pour aider le client à répondre.
+4. Ton chaleureux, en français, max 1 emoji.
+5. Maximum 2 phrases au total.`;
+
+  try {
+    const result = await provider.generateText({
+      systemPrompt,
+      userPrompt: `Message client trop bref : "${userMessage}"`,
+      temperature: 0.5,
+      maxTokens: 120,
+      model: 'gpt-4o-mini',
+    });
+    return result.text.trim();
+  } catch {
+    return 'Décrivez en une phrase ce que vous voulez promouvoir (ex: "affiche pour ma crème anti-âge") ou ajoutez une image.';
+  }
+}
+
+export async function processChat(
+  userMessage: string,
+  context: ChatContext,
+): Promise<ChatResponse> {
+  const trimmed = userMessage.trim();
+  const hasReferenceImages = Boolean(
+    context.referenceImageUrls && context.referenceImageUrls.length > 0,
+  );
+
+  let visionAnalysis: VisionAnalysis | null = null;
+  if (hasReferenceImages) {
+    visionAnalysis = await analyzeImages(context.referenceImageUrls!);
+  }
+
+  let brief: CreativeBrief;
+  try {
+    brief = await analyzeBrief(userMessage, {
+      brandKit: context.brandKit
+        ? {
+            name: context.brandKit.name,
+            tone: context.brandKit.tone,
+            forbiddenWords: context.brandKit.forbiddenWords,
+          }
+        : undefined,
+      previousMessages: context.messages.map((m) => ({ role: m.role, content: m.content })),
+      imageUrls: context.referenceImageUrls,
+      preComputedVision: visionAnalysis,
+    });
+  } catch (err) {
+    console.warn('[ChatAgent] analyzeBrief failed, using empty brief:', err instanceof Error ? err.message : err);
+    brief = emptyBrief(userMessage);
+  }
+
+  const matchInput = {
+    rawText: `${userMessage} ${brief.productName ?? ''} ${brief.productDescription ?? ''} ${visionAnalysis?.detectedProduct ?? ''} ${visionAnalysis?.productCategory ?? ''}`,
+    detectedCategory: brief.productCategory ?? visionAnalysis?.productCategory ?? null,
+    detectedSubcategory: visionAnalysis?.productSubcategory ?? null,
+    isPromo: /promo|solde|sale|r[ée]duction|-?\d+\s*%|black|cyber/i.test(userMessage),
+    isLaunch: /lancement|launch|nouveau|new|drop/i.test(userMessage),
+  };
+
+  const templateMatch = matchMarketingTemplate(matchInput);
+
+  const decision = decideAutoGenerate({
+    userMessage,
+    brief,
+    vision: visionAnalysis,
+    hasReferenceImages,
+    conversationLength: context.messages.length,
+    templateConfidence: templateMatch.confidence,
+  });
+
+  const isTrivial =
+    TRIVIAL_MSG_PATTERN.test(trimmed) && !hasReferenceImages && !brief.productName;
+
+  if (isTrivial || !decision.shouldGenerate) {
+    const message = await buildClarificationMessage({
+      userMessage,
       brief,
-      strategy: strategy ?? undefined,
-      shouldGenerate,
+      hasReferenceImages,
+      conversationLength: context.messages.length,
+    });
+    return {
+      message,
+      brief,
+      strategy: undefined,
+      shouldGenerate: false,
       metadata: {
-        provider: result.provider,
-        model: result.model,
-        durationMs: result.durationMs,
-        usage: result.usage,
+        decision,
+        templateMatch: { id: templateMatch.template.id, confidence: templateMatch.confidence },
+        visionDetected: visionAnalysis?.detectedProduct ?? null,
       },
     };
-  } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
+  }
 
-    const fallbackBrief = brief ?? buildFallbackBrief(userMessage);
-    const fallbackStrategy = strategy ?? buildFallbackStrategy(fallbackBrief);
+  const qualityMode = inferQualityMode(brief);
 
-    if (isAskingToGenerate || GENERATION_KEYWORDS.test(userMessage)) {
-      return {
-        message:
-          `C'est noté ! Je lance la création de votre visuel "${fallbackBrief.productName ?? userMessage}". ` +
-          'Voici ma suggestion — génération en cours.',
-        brief: fallbackBrief,
-        strategy: fallbackStrategy,
-        shouldGenerate: true,
-        metadata: { directMode: true, originalError: raw },
+  let strategy: CreativeStrategy;
+  try {
+    strategy = await generateCreativeStrategy(brief, {
+      count: 3,
+      brandKit: context.brandKit
+        ? {
+            primaryColors: context.brandKit.primaryColors,
+            tone: context.brandKit.tone,
+            preferredCTAs: context.brandKit.preferredCTAs,
+          }
+        : undefined,
+    });
+
+    if (!strategy.suggestions || strategy.suggestions.length === 0) {
+      strategy = buildStrategyFromTemplate(templateMatch.template, brief, visionAnalysis, qualityMode);
+    } else {
+      const visionSummary = visionAnalysis ? summarizeVisionForPrompt(visionAnalysis) : null;
+      strategy = {
+        ...strategy,
+        suggestions: strategy.suggestions.map((s, i) => ({
+          ...s,
+          visualConcept:
+            s.visualConcept && s.visualConcept.length > 30
+              ? `${s.visualConcept}, ${templateMatch.template.photoStyle}${visionSummary ? `, ${visionSummary}` : ''}`
+              : composeVisualConceptFromTemplate({
+                  template: templateMatch.template,
+                  productName: brief.productName,
+                  productCategory: brief.productCategory,
+                  visionSummary,
+                  qualityMode,
+                }),
+          headline: s.headline || pickHeadlineFromTemplate(templateMatch.template, brief.productName, brief.offer, i),
+          cta: s.cta || pickCtaFromTemplate(templateMatch.template, i),
+        })),
       };
     }
-
-    return {
-      message:
-        `Je comprends votre demande pour "${fallbackBrief.productName ?? userMessage}". ` +
-        'Décrivez votre visuel et je lancerai la génération directement !',
-      brief: fallbackBrief,
-      strategy: fallbackStrategy,
-      shouldGenerate: false,
-      metadata: { fallback: true, originalError: raw },
-    };
+  } catch (err) {
+    console.warn('[ChatAgent] strategy generation failed, using template fallback:', err instanceof Error ? err.message : err);
+    strategy = buildStrategyFromTemplate(templateMatch.template, brief, visionAnalysis, qualityMode);
   }
+
+  const message = await buildAssistantConfirmation({
+    userMessage,
+    brief,
+    template: templateMatch.template,
+    inferredFromVision: decision.inferredFromVision,
+    qualityMode,
+  });
+
+  return {
+    message,
+    brief,
+    strategy,
+    shouldGenerate: true,
+    metadata: {
+      decision,
+      templateMatch: {
+        id: templateMatch.template.id,
+        sector: templateMatch.template.sector,
+        useCase: templateMatch.template.useCase,
+        confidence: templateMatch.confidence,
+      },
+      visionDetected: visionAnalysis?.detectedProduct ?? null,
+      qualityMode,
+      autoInferred: decision.inferredFromVision,
+    },
+  };
 }
