@@ -61,10 +61,10 @@ function usageTypeToProvider(type: ImageUsageType): ImageProviderName {
 }
 
 const FALLBACK_ORDER: Record<ImageProviderName, ImageProviderName[]> = {
-  nanobanana: [],
+  nanobanana: ['openai'],
   openai: ['nanobanana'],
-  flux: ['nanobanana'],
-  ideogram: ['nanobanana'],
+  flux: ['nanobanana', 'openai'],
+  ideogram: ['nanobanana', 'openai'],
 };
 
 export class ImageGenerationRouter {

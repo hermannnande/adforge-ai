@@ -95,8 +95,12 @@ export const providerCapabilityRegistry = {
   },
 
   listAvailableProviders(): ProviderName[] {
+    // NANOBANANA reste le moteur principal (meilleur score sur la plupart des
+    // tâches). OPENAI est ré-activé comme fallback si Gemini échoue (429,
+    // quota, safety filter). FLUX et IDEOGRAM restent désactivés tant que
+    // leurs clés API ne sont pas configurées en prod.
     return Object.values(ProviderName).filter(
-      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX && p !== ProviderName.OPENAI,
+      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX,
     );
   },
 

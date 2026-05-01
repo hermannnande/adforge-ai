@@ -186,16 +186,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ selectedImageId: images[0].id });
       }
     } catch (err) {
-      let msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      const rawMsg = err instanceof Error ? err.message : 'Erreur inconnue';
+      console.error('[Generation] Raw error:', rawMsg);
+
+      let msg = rawMsg;
       if (err instanceof DOMException && err.name === 'AbortError') {
         msg = 'La génération a dépassé le temps maximal. Le moteur est peut-être surchargé — réessayez dans un moment.';
-      } else if (/fetch failed|network/i.test(msg)) {
+      } else if (/fetch failed|network/i.test(rawMsg)) {
         msg = 'Problème de connexion au serveur. Vérifiez votre réseau et réessayez.';
-      } else if (/filtré|sécurité|safety|reformuler/i.test(msg)) {
+      } else if (/filtré|sécurité|safety|reformuler/i.test(rawMsg)) {
         msg = 'Votre demande a été filtrée par le système de sécurité. Essayez de reformuler votre requête.';
-      } else if (/billing|quota|rate.?limit|exceeded|429|403/i.test(msg)) {
-        msg = 'Le service de génération est temporairement indisponible. Veuillez réessayer dans quelques instants.';
-      } else if (/openai|flux|ideogram|google|nanobanana/i.test(msg)) {
+      } else if (/RESOURCE_EXHAUSTED|daily.?quota|quota.?exhausted|per.?day|exhausted.+day/i.test(rawMsg)) {
+        msg = 'Quota journalier de génération atteint. Le service redémarre dans quelques heures, ou contactez le support pour passer en plan supérieur.';
+      } else if (/billing|insufficient.?(credits|quota)/i.test(rawMsg)) {
+        msg = 'Crédits insuffisants sur le service de génération. Contactez le support.';
+      } else if (/quota|rate.?limit|exceeded|429|403/i.test(rawMsg)) {
+        msg = 'Le service de génération est saturé. Réessayez dans 1 minute.';
+      } else if (/openai|flux|ideogram|google|nanobanana/i.test(rawMsg)) {
         msg = 'La génération a rencontré une erreur. Veuillez réessayer.';
       }
       setGenerationError(msg);
