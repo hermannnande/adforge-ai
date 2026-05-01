@@ -95,13 +95,20 @@ export const providerCapabilityRegistry = {
   },
 
   listAvailableProviders(): ProviderName[] {
-    // NANOBANANA reste le moteur principal (meilleur score sur la plupart des
-    // tâches). OPENAI est ré-activé comme fallback si Gemini échoue (429,
-    // quota, safety filter). FLUX et IDEOGRAM restent désactivés tant que
-    // leurs clés API ne sont pas configurées en prod.
-    return Object.values(ProviderName).filter(
-      (p) => p !== ProviderName.IDEOGRAM && p !== ProviderName.FLUX,
-    );
+    // Tous les providers sont actifs : leurs clés sont configurées sur Vercel.
+    // - FLUX (Black Forest Labs) : champion photoréalisme (10/10), idéal
+    //   pour les visuels publicitaires premium et les rendus produits
+    //   ultra-réalistes. Sera priorisé automatiquement par le scoring engine
+    //   quand needPhotorealism=true.
+    // - IDEOGRAM : champion typographie/poster (10/10), priorisé sur les
+    //   affiches avec gros texte, prix, slogans, branding visible.
+    // - NANOBANANA (Gemini 2.5) : champion multi-référence (10/10) et
+    //   généraliste solide, priorisé sur les briefs avec plusieurs images
+    //   de référence.
+    // - OPENAI (DALL-E 3) : fallback universel.
+    // Le scoring engine choisit le meilleur provider selon le brief réel
+    // (capabilityFit ×3 + healthScore ×2 + ...).
+    return Object.values(ProviderName);
   },
 
   supportsTask(provider: ProviderName, taskType: GenerationTaskType): boolean {

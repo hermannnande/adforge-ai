@@ -90,16 +90,23 @@ describe('detectTextRequirement', () => {
 });
 
 describe('detectRealismLevel', () => {
-  it('detects high realism', () => {
+  it('detects high realism on explicit photo terms', () => {
     expect(detectRealismLevel('ultra réaliste photo studio')).toBe('high');
   });
 
-  it('detects low realism for illustration', () => {
+  it('detects high realism on commercial ad context', () => {
+    // Une publicité commerciale doit par défaut être photoréaliste,
+    // c'est l'usage attendu pour une affiche publicitaire.
+    expect(detectRealismLevel('crée une pub')).toBe('high');
+    expect(detectRealismLevel('affiche pour vendre mon produit')).toBe('high');
+  });
+
+  it('detects low realism for explicit illustration request', () => {
     expect(detectRealismLevel('illustration cartoon flat design')).toBe('low');
   });
 
-  it('defaults to medium', () => {
-    expect(detectRealismLevel('crée une pub')).toBe('medium');
+  it('returns medium only on ambiguous non-commercial input', () => {
+    expect(detectRealismLevel('quelque chose de joli')).toBe('medium');
   });
 });
 

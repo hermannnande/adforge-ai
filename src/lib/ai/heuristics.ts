@@ -1,7 +1,13 @@
 import { GenerationTaskType, TextRequirementMode } from './enums';
 
 const PHOTOREALISM_RE =
-  /photo\s*r[ée]al|ultra\s*r[ée]al|r[ée]aliste|photo\s*produit|product\s*photo|lifestyle|mise\s*en\s*sc[eè]ne|studio\s*lighting|packshot|shooting|tr[eè]s\s*r[ée]aliste|photo\s*pro|qualit[eé]\s*studio/i;
+  /photo\s*r[ée]al|ultra\s*r[ée]al|r[ée]aliste|photo\s*produit|product\s*photo|lifestyle|mise\s*en\s*sc[eè]ne|studio\s*lighting|packshot|shooting|tr[eè]s\s*r[ée]aliste|photo\s*pro|qualit[eé]\s*studio|affiche\s*pro|publicit|professionnel|magazine|campagne|premium|haut\s*de\s*gamme|vendre|vente|commercial|client|marketing\s*pro|haute\s*qualit[ée]|pro\s*level/i;
+
+const COMMERCIAL_AD_RE =
+  /affiche|annonce|pub(licit[ée])?|ad\b|advertisement|vendre|promouvoir|campagne|marketing|client|produit|product|business|brand|marque|launch|lancement/i;
+
+const ILLUSTRATION_RE =
+  /illustration|cartoon|flat\s*design|dessin|sketch|art\s*num[ée]rique|anime|manga|3d\s*render|cgi|render\b|low[\s-]?poly/i;
 
 const TEXT_HEAVY_RE =
   /texte\s*(dans|sur|visible|lisible)|affiche\s*avec\s*texte|poster|slogan|miniature\s*branding|logo.*poster|text\s*in\s*image|headline.*visible|gros\s*texte|typo(graphi)?|branding.*texte/i;
@@ -83,9 +89,22 @@ export function detectTextRequirement(prompt: string): {
   return { mode: TextRequirementMode.NONE, level: 'low', exactTexts: [] };
 }
 
+/**
+ * Détecte le niveau de réalisme requis.
+ *
+ * IMPORTANT : pour AdForge AI, le défaut sur une publicité commerciale
+ * est PHOTORÉALISTE (HIGH), pas medium. Une affiche pub doit ressembler
+ * à une vraie photo professionnelle, pas à une illustration générique.
+ *
+ * - 'low' : explicite illustration/cartoon/flat/sketch
+ * - 'high' : photoréalisme explicite OU contexte commercial standard
+ *            (affiche, pub, vendre, marketing, etc.)
+ * - 'medium' : seulement les cas vraiment ambigus
+ */
 export function detectRealismLevel(prompt: string): 'low' | 'medium' | 'high' {
+  if (ILLUSTRATION_RE.test(prompt)) return 'low';
   if (PHOTOREALISM_RE.test(prompt)) return 'high';
-  if (/illustration|cartoon|flat\s*design|dessin|sketch|art\s*num[ée]rique/i.test(prompt)) return 'low';
+  if (COMMERCIAL_AD_RE.test(prompt)) return 'high';
   return 'medium';
 }
 
